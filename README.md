@@ -1,0 +1,127 @@
+# Yae Music
+
+A Discord music bot that plays **YouTube** and **Spotify** songs, albums and playlists in voice
+channels, with a **web control panel** for logs, start/stop, settings and live "now playing" controls.
+
+Runs on your Windows PC (`start.bat`) or as a Docker container (CasaOS or any Docker host).
+
+## 1. Create the Discord bot (once)
+
+1. Go to <https://discord.com/developers/applications> → **New Application** and give it a name.
+2. Open **Bot** → **Reset Token** → copy the token. Keep it secret: anyone with it controls the bot.
+   No "Privileged Gateway Intents" are needed.
+3. Start the panel (step 2 or 3 below), open **Settings**, paste the token, then **Save** and **Start**.
+4. On the panel's **Overview**, press **Open the invite** and pick your server.
+
+## 2. Run it on your PC (Windows)
+
+Needs **Python 3.11+** (from python.org, tick "Add to PATH") and **FFmpeg** (`winget install Gyan.FFmpeg`).
+
+Double-click **`start.bat`**. The first run installs everything into `.venv` and then opens the
+panel at <http://localhost:8484>. On first visit you choose a panel password. The bot runs for as
+long as that window stays open.
+
+## 3. Run it on CasaOS (Docker)
+
+CasaOS installs apps from ready-made images. GitHub builds this one for you on every push, for
+both normal PCs (amd64) and ARM boards like a Raspberry Pi 4/5 (arm64).
+
+**Once: put the code on GitHub**
+
+1. Make a free account at <https://github.com> and create a new repository named `yae-music`
+   (public is simplest; see the note below for private). Don't add a README or licence.
+2. In this folder, push the code (GitHub shows the same commands on the empty repository's page):
+
+   ```bash
+   git remote add origin https://github.com/YOUR-NAME/yae-music.git
+   git push -u origin main
+   ```
+
+3. Open the repository's **Actions** tab. The **Build the CasaOS image** run takes about 5 minutes
+   the first time. When it's green, open the run: its summary page shows the CasaOS compose file,
+   already filled in with your image's name.
+4. Make the image public, or CasaOS can't download it: your GitHub profile → **Packages** →
+   `yae-music` → **Package settings** → **Change visibility** → **Public**.
+
+**Install it in CasaOS**
+
+5. CasaOS → **App Store** → **Custom Install** → **Import** (top right). Paste the compose
+   file from step 3, then **Submit** and **Install**.
+6. Click the **Yae Music** tile (or open `http://<server-ip>:8484`), choose a panel password,
+   paste the token in **Settings**, **Save**, and press **Start**.
+
+It starts by itself after a reboot. The token, settings, logs and cookies live in
+`/DATA/AppData/yae-music` on the server, so they survive updates and reinstalls.
+
+**To update:** push your changes (`git push`), wait for the Actions run to go green, then in CasaOS
+use the update option in the app tile's menu, or uninstall and install it again. Your data
+folder is kept either way.
+
+**Private repository?** That works too. The code stays private, and only the image (step 4) is public.
+The app icon then won't load in CasaOS, because it's read from the repository.
+
+**Without GitHub:** copy this folder to the server and run `sudo docker compose up -d --build`
+in it over SSH. That uses the root `docker-compose.yml`, which builds the image on the server itself.
+
+## Discord commands
+
+Join a voice channel first. The bot joins the channel of whoever uses `/play`.
+
+| Command | What it does |
+|---|---|
+| `/play <link or words>` | YouTube video/playlist, Spotify track/album/playlist/artist, other yt-dlp sites, or a search |
+| `/playnext <link or words>` | Same, but puts it at the front of the queue |
+| `/skip` · `/skipto <n>` | Skip the song / jump to queue position *n* |
+| `/stop` | Stop, clear the queue and leave |
+| `/pause` · `/resume` | Pause / resume |
+| `/nowplaying` | Current song with a progress bar |
+| `/queue [page]` | Show the queue |
+| `/volume [0-200]` | Show or set the volume |
+| `/loop off\|song\|queue` | Looping |
+| `/shuffle` · `/clear` | Shuffle / empty the queue |
+| `/remove <n>` · `/move <from> <to>` | Edit the queue |
+| `/seek <1:30>` | Jump inside the song |
+| `/help` | List the commands |
+
+The now-playing message has buttons: pause/resume, skip, stop, loop, shuffle. Only people in the
+bot's voice channel can control it. The bot leaves after 5 idle minutes, or 5 minutes alone in the
+channel (change this in Settings).
+
+## The control panel
+
+- **Overview**: bot status, ping, server count, invite link, and every server that's playing,
+  with pause/skip/stop/shuffle/loop/volume and queue removal.
+- **Logs**: a live log with filtering and download. `docker logs musicbot` and CasaOS's own log
+  view show the same lines.
+- **Settings**: token, optional Spotify keys, default volume, idle timeout, playlist and queue
+  limits, auto-start, auto-restart after crashes, and updating yt-dlp on start.
+- **Upkeep**: versions, **Update yt-dlp now**, YouTube cookies upload, panel password.
+
+Forgot the panel password? Set `PANEL_PASSWORD` in `docker-compose.yml` (or as an environment
+variable before `start.bat`). While it is set, it replaces the saved password.
+
+## How Spotify works
+
+Spotify doesn't give out audio, so the bot reads the song names from the link and plays the best
+match from YouTube (the closest length, avoiding live/cover/remix versions). Without any keys it
+reads Spotify's public embed page: songs, albums, artists' top songs, and the **first 100 songs**
+of a playlist. For longer playlists, add a Spotify **Client ID/secret** in Settings. Since 2026
+Spotify only lets accounts with **Premium** create those keys. Private playlists can't be read either way.
+
+## When something stops working
+
+- **Songs fail / "Sign in to confirm you're not a bot"**: first press **Update yt-dlp now** and
+  restart the bot. If it still fails, upload a `cookies.txt` (Upkeep tab) exported from a
+  browser signed in to YouTube, preferably with a spare account.
+- **The bot is online but silent**: check that FFmpeg shows a version on the Upkeep tab.
+- **"Discord rejected the bot token"**: reset the token in the Developer Portal and paste the new one.
+- **Slash commands don't appear**: they register when the bot starts. Re-open Discord (Ctrl+R).
+
+## Notes
+
+- discord.py **2.7+** is required. Since March 2026 Discord only allows encrypted (DAVE) voice
+  connections, and older bots can't join voice channels.
+- YouTube needs a JavaScript runtime; `yt-dlp[deno]` installs Deno automatically. The Docker
+  image supports amd64 and arm64 (64-bit Raspberry Pi OS), but not 32-bit ARM.
+- Layout: `musicbot/bot` is the Discord bot (`python -m musicbot.bot` runs it without the panel),
+  and `musicbot/panel` is the web panel, which runs the bot as a child process.

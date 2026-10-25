@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yae Music</title>
+<link rel="icon" href="/ds/icon.png" type="image/png">
+<script>
+  // Theme and motion before the first paint, so nothing flashes.
+  (function () {
+    var d = document.documentElement, t = null;
+    try { t = localStorage.getItem("theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    d.setAttribute("data-theme", t);
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) d.classList.add("js-motion");
+  })();
+</script>
+<link rel="stylesheet" href="/ds/tokens.css">
+<link rel="stylesheet" href="/ds/bundle.css">
+<link rel="stylesheet" href="/ds/app.css">
+</head>
+<body>
+<a class="skiplink" href="#main">Skip to the content</a>
+
+<!-- ============ the gate: sign in / first password ============ -->
+<div id="gate" hidden>
+  <div class="gate-sky" aria-hidden="true"></div>
+  <div class="gate-card">
+    <div class="gate-torii" aria-hidden="true">
+      <i class="g-kasagi"></i><i class="g-nuki"></i><i class="g-post l"></i><i class="g-post r"></i>
+      <i class="g-rope"></i><i class="g-shide a"></i><i class="g-shide b"></i><i class="g-shide c"></i>
+    </div>
+    <div class="gate-mark"><img class="mascot" id="gate-fox" src="/ds/mascots/wave.gif" alt="" width="84" height="84" draggable="false"></div>
+    <h1 class="gate-name">Yae Music</h1>
+    <p class="gate-sub" id="gate-sub">Control panel</p>
+    <form class="gate-form" id="gate-form" novalidate>
+      <input class="inp" type="password" id="pw1" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
+      <input class="inp" type="password" id="pw2" placeholder="The same password again" aria-label="Repeat the password" autocomplete="new-password" hidden>
+      <div class="gate-err" id="gate-err" role="alert" hidden></div>
+      <button class="btn primary block" type="submit" id="gate-btn"><span class="p5-hl" aria-hidden="true"></span><span>Sign in</span></button>
+    </form>
+    <p class="gate-foot" id="gate-foot">Forgot it? Set <code>PANEL_PASSWORD</code> where the panel runs and sign in with that.</p>
+  </div>
+</div>
+
+<!-- ============ the shell ============ -->
+<div id="shell" hidden>
+  <nav id="rail" aria-label="Panel">
+    <span class="rail-rope" aria-hidden="true"></span>
+    <a class="rail-brand" href="#overview">
+      <img class="mascot rail-mark" src="/ds/mascots/fox-prowl.gif" alt="" width="44" height="44" draggable="false">
+      <span><span class="wm">Yae Music</span><span class="tag">Control panel</span></span>
+    </a>
+    <div class="rail-nav">
+      <div class="sec">The bot</div>
+      <a class="navlink" href="#overview" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/></svg><span>Overview</span></a>
+      <a class="navlink" href="#logs" data-tab="logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h3"/></svg><span>Logs</span><span class="count alarm" id="err-count" hidden></span></a>
+      <a class="navlink" href="#settings" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4"/></svg><span>Settings</span></a>
+      <a class="navlink" href="#upkeep" data-tab="upkeep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 4.5a4.5 4.5 0 0 0-5.9 5.9L4 16v4h4l5.6-5.6a4.5 4.5 0 0 0 5.9-5.9L17 11l-3-3z"/></svg><span>Upkeep</span></a>
+    </div>
+    <div style="flex:1"></div>
+    <div class="cmp" id="cmp">
+      <span class="cmp-grass" aria-hidden="true"></span>
+      <button class="cmp-btn" type="button" id="cmp-btn" aria-label="The shrine fox: what is it doing?">
+        <span class="cmp-walker"><img class="mascot cmp-sprite" id="cmp-sprite" src="/ds/mascots/walk.gif" alt="" width="40" height="40" draggable="false"></span>
+        <span class="cmp-say" id="cmp-say"></span>
+      </button>
+    </div>
+    <div class="rail-foot">
+      <button class="btn sm ghost icon" type="button" id="theme-btn" aria-label="Use the dark theme"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="theme-ico" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></button>
+      <button class="btn sm ghost" type="button" id="logout-btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg><span>Sign out</span></button>
+      <span class="conn" id="conn"><span class="conn-lamp" aria-hidden="true"></span><span id="conn-word">Linking</span></span>
+    </div>
+  </nav>
+
+  <div id="col">
+    <header id="topbar">
+      <button class="btn sm ghost icon" type="button" id="railtoggle" aria-label="Open the menu" style="display:none"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="crumbs"><span class="t" id="crumb-t">Overview</span><span class="s" id="crumb-s"></span></div>
+      <div class="btnrow" id="power">
+        <button class="btn sm primary" type="button" id="btn-start"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l14 8-14 8z"/></svg><span>Start</span></button>
+        <button class="btn sm" type="button" id="btn-restart"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6M20 5v6h-6"/></svg><span>Restart</span></button>
+        <button class="btn sm ghost" type="button" id="btn-stop"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg><span>Stop</span></button>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <div class="wrap">
+
+        <!-- ============ Overview ============ -->
+        <section class="screen" id="screen-overview" aria-labelledby="ov-title">
+          <header class="fleet-head page-intro">
+            <div class="fh-words">
+              <p class="eyebrow">Discord bot · <b id="ov-eyebrow">not connected yet</b></p>
+              <h1 class="brush fh-title" id="ov-title">Yae Music</h1>
+              <p class="lede" id="ov-lede">Reading the bot's state.</p>
+            </div>
+            <img class="mascot fh-fox" src="/ds/mascots/fox-pounce.gif" alt="" width="92" height="92" draggable="false">
+          </header>
+
+          <div id="banner"></div>
+
+          <div class="kpis" style="margin-bottom:var(--sp-5)">
+            <div class="kpi"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h18v5H3zM3 13.5h18v5H3zM6.5 8h.01M6.5 16h.01"/></svg></span><div class="lbl">Servers</div><div class="v tnum" id="k-guilds">—</div><div class="sub">it has been added to</div></div>
+            <div class="kpi"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/></svg></span><div class="lbl">Playing in</div><div class="v tnum" id="k-playing">—</div><div class="sub">voice channels right now</div></div>
+            <div class="kpi"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0M12 12h.01"/></svg></span><div class="lbl">Ping</div><div class="v tnum" id="k-ping">—</div><div class="sub">to Discord</div></div>
+            <div class="kpi"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5V12l3 2"/></svg></span><div class="lbl">Up for</div><div class="v tnum" id="k-uptime">—</div><div class="sub">since it last started</div></div>
+          </div>
+
+          <div class="split">
+            <div class="stack" id="players"></div>
+            <aside class="stack">
+              <section class="panel">
+                <header><h3>The bot</h3><span class="sp" id="bot-pid"></span></header>
+                <div class="pad">
+                  <div class="bot-id">
+                    <span class="seal dead lg" id="bot-seal" role="img" aria-label="Stopped"><b>休</b><small>Stopped</small></span>
+                    <div class="who"><b id="bot-name">Not connected yet</b><span id="bot-sub">Start it to connect to Discord.</span></div>
+                  </div>
+                  <dl class="facts">
+                    <div><dt>State</dt><dd id="f-state">—</dd></div>
+                    <div><dt>Up for</dt><dd id="f-uptime">—</dd></div>
+                    <div><dt>Last exit code</dt><dd id="f-exit">—</dd></div>
+                  </dl>
+                </div>
+              </section>
+              <section class="panel">
+                <header><h3>Add it to a server</h3></header>
+                <div class="pad">
+                  <p class="muted">Discord's invite page, with the permissions it needs: join and speak in voice, send messages.</p>
+                  <div class="btnrow">
+                    <button class="btn sm" type="button" id="btn-invite" disabled><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg><span>Open the invite</span></button>
+                    <button class="btn sm ghost" type="button" id="btn-copy-invite" disabled><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9h11v11H9zM5 15H4V4h11v1"/></svg><span>Copy the link</span></button>
+                  </div>
+                  <p class="muted" id="invite-why" style="margin-top:10px;font-size:12.5px">The link appears once the bot is connected.</p>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <!-- ============ Logs ============ -->
+        <section class="screen" id="screen-logs" aria-labelledby="lg-title" hidden>
+          <section class="panel">
+            <header><h3 id="lg-title">Live log</h3><span class="sp" id="log-count">0 lines</span></header>
+            <div class="pad">
+              <div class="logbar">
+                <input class="inp" type="search" id="log-filter" placeholder="Filter the lines" aria-label="Filter the log lines">
+                <div class="seg" role="group" aria-label="Which lines">
+                  <button type="button" aria-pressed="true" data-level="all">All</button>
+                  <button type="button" aria-pressed="false" data-level="warn">Warnings</button>
+                  <button type="button" aria-pressed="false" data-level="error">Errors</button>
+                </div>
+                <label class="switch"><input type="checkbox" id="log-follow" checked><span class="track"></span>Follow</label>
+                <div class="btnrow" style="margin:0">
+                  <button class="btn sm ghost" type="button" id="log-clear"><span>Clear the view</span></button>
+                  <button class="btn sm" type="button" id="log-download"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg><span>Download</span></button>
+                </div>
+              </div>
+              <div class="term" id="logview" role="log" aria-live="off" tabindex="0"></div>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============ Settings ============ -->
+        <section class="screen" id="screen-settings" aria-labelledby="st-title" hidden>
+          <header class="fleet-head page-intro">
+            <div class="fh-words">
+              <p class="eyebrow">Saved in <b id="st-where">settings.json</b></p>
+              <h1 class="brush fh-title" id="st-title">Settings</h1>
+              <p class="lede">The bot reads these when it starts, so a change takes effect after a restart.</p>
+            </div>
+            <img class="mascot fh-fox" src="/ds/mascots/piglindance.gif" alt="" width="92" height="92" draggable="false">
+          </header>
+          <form id="settings-form" autocomplete="off" novalidate>
+            <div class="grid g2">
+              <div class="stack">
+                <section class="panel">
+                  <header><h3>Discord</h3></header>
+                  <div class="pad">
+                    <div class="field"><label for="s-discord_token">Bot token <span class="req">*</span></label>
+                      <input type="password" id="s-discord_token">
+                      <div class="help">Discord Developer Portal, your application, Bot, Reset Token. Leave it empty to keep the saved one.</div></div>
+                  </div>
+                </section>
+                <section class="panel">
+                  <header><h3>Spotify</h3><span class="sp">Optional</span></header>
+                  <div class="pad">
+                    <div class="note info" style="margin-bottom:16px"><b>Spotify links work without these</b>Songs, albums, artists and the first 100 songs of a playlist. Keys only lift the 100-song limit, and since 2026 Spotify gives them only to Premium accounts.</div>
+                    <div class="field"><label for="s-spotify_client_id">Client ID</label><input type="text" id="s-spotify_client_id"></div>
+                    <div class="field"><label for="s-spotify_client_secret">Client secret</label><input type="password" id="s-spotify_client_secret">
+                      <div class="help">Leave it empty to keep the saved one.</div></div>
+                    <button class="btn xs ghost" type="button" id="clear-spotify"><span>Remove the Spotify keys</span></button>
+                  </div>
+                </section>
+              </div>
+              <div class="stack">
+                <section class="panel">
+                  <header><h3>Playback</h3></header>
+                  <div class="pad">
+                    <div class="field"><label for="s-default_volume">Starting volume, %</label><input type="number" id="s-default_volume" min="0" max="200">
+                      <div class="help">Each server starts at this; /volume changes it there.</div></div>
+                    <div class="field"><label for="s-idle_timeout">Leave after, minutes</label><input type="number" id="s-idle_timeout" min="0" max="1440">
+                      <div class="help">How long it waits with nothing playing, or alone in the channel. 0 means it never leaves.</div></div>
+                    <div class="field"><label for="s-max_playlist">Songs taken from one playlist</label><input type="number" id="s-max_playlist" min="1" max="5000"></div>
+                    <div class="field"><label for="s-max_queue">Longest queue</label><input type="number" id="s-max_queue" min="1" max="10000"></div>
+                    <div class="field"><label for="s-ffmpeg_path">FFmpeg</label><input type="text" id="s-ffmpeg_path">
+                      <div class="help">Usually just <code>ffmpeg</code>. On Windows this can be the full path to ffmpeg.exe.</div></div>
+                  </div>
+                </section>
+                <section class="panel">
+                  <header><h3>The panel</h3></header>
+                  <div class="pad switches">
+                    <label class="switch"><input type="checkbox" id="s-autostart"><span class="track"></span>Start the bot when the panel starts</label>
+                    <label class="switch"><input type="checkbox" id="s-auto_restart"><span class="track"></span>Restart the bot when it crashes</label>
+                    <label class="switch"><input type="checkbox" id="s-update_ytdlp_on_start"><span class="track"></span>Update yt-dlp each time the panel starts</label>
+                  </div>
+                </section>
+              </div>
+            </div>
+            <div class="form-foot btnrow">
+              <button class="btn ghost" type="button" id="settings-reload"><span>Discard changes</span></button>
+              <button class="btn primary" type="submit"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/></svg><span>Save</span></button>
+            </div>
+          </form>
+        </section>
+
+        <!-- ============ Upkeep ============ -->
+        <section class="screen" id="screen-upkeep" aria-labelledby="up-title" hidden>
+          <header class="fleet-head page-intro">
+            <div class="fh-words">
+              <p class="eyebrow">Running on <b id="up-where">this machine</b></p>
+              <h1 class="brush fh-title" id="up-title">Upkeep</h1>
+              <p class="lede">What the bot is built from, and the few things that keep YouTube playing.</p>
+            </div>
+            <img class="mascot fh-fox" src="/ds/mascots/nod.gif" alt="" width="92" height="92" draggable="false">
+          </header>
+          <div class="grid g2">
+            <div class="stack">
+              <section class="panel">
+                <header><h3>yt-dlp</h3><span class="sp" id="ytdlp-ver"></span></header>
+                <div class="pad">
+                  <p>yt-dlp is what reads YouTube. YouTube changes often; when songs stop playing, an update is usually the fix.</p>
+                  <div id="update-note"></div>
+                  <button class="btn primary" type="button" id="btn-update"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg><span>Update yt-dlp</span></button>
+                </div>
+              </section>
+              <section class="panel">
+                <header><h3>YouTube cookies</h3><span class="sp" id="cookie-pill"></span></header>
+                <div class="pad">
+                  <p>Only needed when the log says <i>Sign in to confirm you're not a bot</i>, or for age-restricted videos. Export <code>cookies.txt</code> from a browser signed in to YouTube, ideally with a spare Google account.</p>
+                  <div class="btnrow">
+                    <button class="btn" type="button" id="btn-cookie-pick"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V9M7 13l5-5 5 5M4 4h16"/></svg><span>Upload cookies.txt</span></button>
+                    <button class="btn ghost" type="button" id="btn-cookie-del" hidden><span>Remove them</span></button>
+                  </div>
+                  <input type="file" id="cookie-file" accept=".txt,text/plain" hidden>
+                </div>
+              </section>
+            </div>
+            <div class="stack">
+              <section class="panel">
+                <header><h3>What it runs on</h3></header>
+                <div class="pad"><div class="tablewrap"><table class="tbl"><thead><tr><th>Part</th><th class="num">Version</th></tr></thead><tbody id="versions"></tbody></table></div></div>
+              </section>
+              <section class="panel">
+                <header><h3>Panel password</h3></header>
+                <div class="pad">
+                  <form id="pw-form" novalidate>
+                    <div class="field"><label for="pw-cur">Current password</label><input type="password" id="pw-cur" autocomplete="current-password"></div>
+                    <div class="field"><label for="pw-new">New password</label><input type="password" id="pw-new" autocomplete="new-password"><div class="help">At least 6 characters. Signing in elsewhere stops working until you use the new one.</div></div>
+                    <button class="btn" type="submit"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 7a4 4 0 1 1-3.9 5H8v3H5v-3H3v-3h8.1A4 4 0 0 1 15 7Z"/></svg><span>Change it</span></button>
+                  </form>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const M = name => `/ds/mascots/${name}.gif`;
+const ICON = {
+  play: "M6 4l14 8-14 8z", pause: "M9 5v14M15 5v14", stop: "M6 6h12v12H6z", x: "M6 6l12 12M18 6L6 18",
+  // drawn for this panel on the same 24px grid and 1.8 stroke as the set
+  skip: "M5 5l10 7-10 7zM18 5v14",
+  shuffle: "M3 7h3.5c5 0 6 10 11 10H21M3 17h3.5c1.6 0 2.8-1 3.8-2.4M13.7 9.4C14.7 8 15.9 7 17.5 7H21M18 4l3 3-3 3M18 14l3 3-3 3",
+  clear: "M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6",
+  sun: "M12 16.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM12 2v2M12 20v2M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2 12h2M20 12h2M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5",
+  moon: "M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z",
+  wrench: "M15.5 4.5a4.5 4.5 0 0 0-5.9 5.9L4 16v4h4l5.6-5.6a4.5 4.5 0 0 0 5.9-5.9L17 11l-3-3z",
+  log: "M6 3h12v18H6zM9 7h6M9 11h6M9 15h3",
+};
+const svg = (name, size = 13) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${ICON[name]}"/></svg>`;
+
+async function api(path, {method = "GET", body} = {}) {
+  const r = await fetch(path, {method, headers: {"Content-Type": "application/json", "X-Requested-With": "musicbot"},
+                               body: body === undefined ? undefined : JSON.stringify(body)});
+  let data = {};
+  try { data = await r.json(); } catch {}
+  if (r.status === 401 && !path.startsWith("/api/login")) { showGate(false); throw new Error("Your sign-in ran out. Sign in again."); }
+  if (!r.ok || data.ok === false) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+/* ---------- time ---------- */
+const fmt = s => {
+  if (s == null) return "live";
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0");
+};
+const span = s => {
+  s = Math.floor(s);
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
+};
+const words = n => ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][n] ?? String(n);
+
+/* ---------- toasts: a slip dropping on its cord ---------- */
+const TOAST_FOX = {ok: "celebrate", bad: "hurt", warn: "surprise", info: "nod"};
+function toast(kind, title, text = "", action) {
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.setAttribute("role", kind === "bad" ? "alert" : "status");
+  el.innerHTML = `<span class="toast-cord" aria-hidden="true"></span>
+    <img class="mascot toast-mascot" src="${M(TOAST_FOX[kind])}" alt="" width="46" height="46" draggable="false">
+    <div class="msg"><b>${esc(title)}</b>${esc(text)}</div>
+    <button class="btn icon xs ghost" type="button" aria-label="Dismiss">${svg("x")}</button>`;
+  if (action) {
+    const b = document.createElement("button");
+    b.className = "btn xs";
+    b.type = "button";
+    b.innerHTML = `<span class="p5-hl" aria-hidden="true"></span><span>${esc(action.label)}</span>`;
+    b.onclick = () => { action.run(); el.remove(); };
+    $(".msg", el).appendChild(document.createElement("br"));
+    $(".msg", el).appendChild(b);
+  }
+  $("button[aria-label=Dismiss]", el).onclick = () => el.remove();
+  let left = kind === "bad" ? 9000 : action ? 9000 : 4500, timer;
+  const run = () => { const t0 = Date.now(); timer = setTimeout(() => el.remove(), left); el._t0 = t0; };
+  el.onmouseenter = () => { clearTimeout(timer); left -= Date.now() - el._t0; };
+  el.onmouseleave = run;
+  $("#toasts").appendChild(el);
+  run();
+}
+
+/* ---------- the gate ---------- */
+let setupMode = false;
+function showGate(setup) {
+  setupMode = setup;
+  $("#shell").hidden = true;
+  const g = $("#gate");
+  g.hidden = false;
+  g.classList.remove("opening");
+  $("#pw2").hidden = !setup;
+  $("#pw1").autocomplete = setup ? "new-password" : "current-password";
+  $("#pw1").placeholder = setup ? "Choose a password" : "Password";
+  $("#gate-sub").textContent = setup ? "First visit: choose a password" : "Control panel";
+  $("#gate-btn span:last-child").textContent = setup ? "Set the password" : "Sign in";
+  $("#gate-foot").hidden = setup;
+  $("#gate-fox").src = M("wave");
+  $("#pw1").focus();
+}
+function gateError(text) {
+  const g = $("#gate"), e = $("#gate-err");
+  e.textContent = text;
+  e.hidden = false;
+  $("#gate-fox").src = M("hurt");
+  g.classList.remove("shaking");
+  void g.offsetWidth;
+  g.classList.add("shaking");
+}
+$("#gate-form").onsubmit = async ev => {
+  ev.preventDefault();
+  $("#gate-err").hidden = true;
+  const pw = $("#pw1").value, btn = $("#gate-btn");
+  if (setupMode && pw.length < 6) return gateError("Use at least 6 characters.");
+  if (setupMode && pw !== $("#pw2").value) return gateError("The two passwords are different. Type the same one twice.");
+  btn.classList.add("busy");
+  btn.disabled = true;
+  $("#gate-fox").src = M("run");
+  try {
+    await api(setupMode ? "/api/setup" : "/api/login", {method: "POST", body: {password: pw}});
+    $("#pw1").value = $("#pw2").value = "";
+    $("#gate").classList.add("opening");
+    setTimeout(enterApp, document.documentElement.classList.contains("js-motion") ? 480 : 0);
+  } catch (err) {
+    gateError(err.message === "Wrong password." ? "That password is not the one this panel was given." : err.message);
+  } finally {
+    btn.classList.remove("busy");
+    btn.disabled = false;
+  }
+};
+
+/* ---------- screens ---------- */
+const SCREENS = {overview: "Overview", logs: "Logs", settings: "Settings", upkeep: "Upkeep"};
+let screen = "overview";
+function route() {
+  const want = location.hash.slice(1);
+  screen = SCREENS[want] ? want : "overview";
+  for (const k in SCREENS) $("#screen-" + k).hidden = k !== screen;
+  document.querySelectorAll(".navlink").forEach(a =>
+    a.dataset.tab === screen ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  $("#crumb-t").textContent = SCREENS[screen];
+  document.body.classList.remove("rail-open");
+  if (screen === "settings") loadSettings();
+  if (screen === "upkeep") loadUpkeep();
+  if (screen === "logs") { unseenErrors = 0; paintErrCount(); scrollLogs(true); }
+}
+addEventListener("hashchange", route);
+$("#railtoggle").onclick = () => document.body.classList.toggle("rail-open");
+
+/* ---------- theme ---------- */
+function paintTheme() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  $("#theme-ico").setAttribute("d", dark ? ICON.sun : ICON.moon);
+  $("#theme-btn").setAttribute("aria-label", dark ? "Use the light theme" : "Use the dark theme");
+}
+$("#theme-btn").onclick = () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch {}
+  paintTheme();
+};
+
+/* ---------- state ---------- */
+let last = null, lastAt = 0, inviteUrl = null, linked = false;
+const SEAL = {
+  running: ["ok", "稼", "Running"], starting: ["warn", "起", "Starting"], stopping: ["warn", "止", "Stopping"],
+  stopped: ["dead", "休", "Stopped"], crashed: ["bad", "倒", "Crashed"], unfinished: ["gold", "未", "Unfinished"],
+};
+
+function botState() {
+  const {process: p, bot} = last;
+  if (!last.has_token && !["running", "starting", "stopping"].includes(p.state)) return "unfinished";
+  if (p.state === "running" && !(bot && bot.ready)) return "starting";
+  return p.state;
+}
+
+async function poll() {
+  try {
+    last = await api("/api/status");
+    lastAt = Date.now();
+    setLink(true);
+    paintStatus();
+  } catch (e) {
+    setLink(false);
+  }
+}
+function setLink(ok) {
+  if (ok === linked) return;
+  linked = ok;
+  $("#conn").className = "conn " + (ok ? "ok" : "bad");
+  $("#conn-word").textContent = ok ? "Linked" : "No link";
+}
+
+function paintStatus() {
+  const {process: p, bot} = last, st = botState();
+  const alive = ["running", "starting", "stopping"].includes(p.state);
+
+  // topbar power buttons
+  $("#btn-start").disabled = alive || !last.has_token;
+  $("#btn-start").title = !last.has_token ? "Add the Discord token in Settings first." : alive ? "It is already running." : "";
+  $("#btn-stop").disabled = !alive && !p.restart_pending;
+  $("#btn-restart").disabled = !alive;
+  $("#crumb-s").textContent = SEAL[st][2];
+
+  // seal
+  const [tone, glyph, word] = SEAL[st];
+  const seal = $("#bot-seal");
+  if (seal.dataset.st !== st) {
+    seal.dataset.st = st;
+    seal.className = `seal ${tone} lg` + (seal.dataset.painted ? " stamp" : "");
+    seal.dataset.painted = "1";
+    seal.setAttribute("aria-label", word);
+    seal.innerHTML = `<b>${glyph}</b><small>${word}</small>`;
+  }
+
+  const name = bot && bot.user ? bot.user.split("#")[0] : null;
+  $("#ov-title").textContent = name || "Your music bot";
+  $("#ov-eyebrow").textContent = bot && bot.user ? bot.user : "not connected yet";
+  $("#bot-name").textContent = bot && bot.user ? bot.user : alive ? "Connecting" : "Not connected";
+  $("#bot-sub").textContent = bot && bot.ready ? "Connected to Discord." : alive ? "Connecting to Discord." : "Start it to connect to Discord.";
+  $("#bot-pid").textContent = p.pid ? "PID " + p.pid : "";
+  $("#f-state").textContent = word;
+  $("#f-uptime").textContent = p.started_at ? span(last.now - p.started_at) : "—";
+  $("#f-exit").textContent = p.exit_code ?? "—";
+
+  const players = bot ? bot.players : [];
+  const playing = players.filter(x => x.current).length;
+  $("#k-guilds").textContent = bot && bot.ready ? bot.guilds : "—";
+  $("#k-playing").textContent = bot && bot.ready ? playing : "—";
+  $("#k-ping").textContent = bot && bot.latency_ms != null ? bot.latency_ms + " ms" : "—";
+  $("#k-uptime").textContent = p.started_at && alive ? span(last.now - p.started_at) : "—";
+
+  $("#ov-lede").textContent = bot && bot.ready
+    ? (bot.guilds === 0
+        ? "It is connected but in no server yet. Add it to one with the invite on the right."
+        : `In ${words(bot.guilds)} server${bot.guilds === 1 ? "" : "s"}, playing in ${words(playing)}. Every queue shows up below.`)
+    : st === "unfinished" ? "It needs its Discord token before it can start."
+    : alive ? "Connecting to Discord." : "It is not running, so nothing can play.";
+
+  inviteUrl = bot && bot.invite;
+  $("#btn-invite").disabled = $("#btn-copy-invite").disabled = !inviteUrl;
+  $("#invite-why").hidden = !!inviteUrl;
+
+  paintBanner(st, p);
+  paintPlayers(players, st);
+  paintCompanion(st, playing);
+}
+
+/* the state banner: every state but a settled, running one */
+function paintBanner(st, p) {
+  let b = null;
+  const goSettings = {label: "Finish setup", cls: "gold", run: () => location.hash = "#settings"};
+  const readLog = {label: "Read the log", cls: "", run: () => location.hash = "#logs"};
+  const start = {label: "Start", cls: "", run: () => power("start")};
+  if (st === "unfinished") b = ["gold", "placeblock", "Setup unfinished", "The bot needs its Discord token before it can start. Paste it in Settings, save, then start it.", [goSettings]];
+  else if (st === "starting") b = ["warn", "run", "Starting", "Connecting to Discord. This takes a few seconds.", []];
+  else if (st === "stopping") b = ["warn", "sneakwalk", "Stopping", "Leaving its voice channels and closing the connection.", []];
+  else if (st === "crashed" && p.restart_pending) b = ["warn", "run", "It crashed, and restarts by itself", (p.hint || "") + " It starts again in a few seconds.", [readLog]];
+  else if (st === "crashed") b = ["bad", "death", "It crashed", p.hint || `It stopped on its own (exit code ${p.exit_code}).`, [readLog, start]];
+  else if (st === "stopped") b = ["dead", "idle", "Resting", "It is stopped, so nobody can play music. Start it when you want it back.", [start]];
+  else if (last.updating) b = ["info", "mine", "Updating yt-dlp", "This takes a few seconds. Restart the bot afterwards to use the new version.", []];
+  const host = $("#banner");
+  const key = b ? b[0] + b[2] + b[3] : "";
+  if (host.dataset.key === key) return;
+  host.dataset.key = key;
+  host.innerHTML = "";
+  if (!b) return;
+  const [tone, fox, title, text, acts] = b;
+  const el = document.createElement("div");
+  el.className = "st-banner " + tone;
+  el.setAttribute("role", "status");
+  el.innerHTML = `<img class="mascot stb-fox" src="${M(fox)}" alt="" width="64" height="64" draggable="false">
+    <div class="stb-words"><b class="brush">${esc(title)}</b><p>${esc(text)}</p></div><div class="btnrow"></div>`;
+  for (const a of acts) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn sm " + a.cls;
+    btn.innerHTML = `<span class="p5-hl" aria-hidden="true"></span><span>${esc(a.label)}</span>`;
+    btn.onclick = a.run;
+    $(".btnrow", el).appendChild(btn);
+  }
+  host.appendChild(el);
+}
+
+/* the companion walks while all is well, mines during an update, hurts after a crash */
+function paintCompanion(st, playing) {
+  const fox = last.updating ? "mine" : st === "crashed" ? "hurt" : st === "unfinished" ? "placeblock" : st === "stopped" ? "idle" : "walk";
+  const sprite = $("#cmp-sprite");
+  if (!sprite.src.endsWith(M(fox))) sprite.src = M(fox);
+  $("#cmp").classList.toggle("still", fox !== "walk");
+  $("#cmp-say").textContent = last.updating ? "Updating yt-dlp" : st === "crashed" ? "It crashed" : st === "stopped" ? "Resting"
+    : st === "unfinished" ? "Needs its token" : playing ? `Playing in ${playing}` : "All quiet";
+}
+$("#cmp-btn").onclick = () => {
+  const c = $("#cmp");
+  c.classList.add("talking");
+  clearTimeout(c._t);
+  c._t = setTimeout(() => c.classList.remove("talking"), 2600);
+};
+
+async function power(action) {
+  ["#btn-start", "#btn-stop", "#btn-restart"].forEach(s => $(s).disabled = true);
+  try {
+    await api("/api/bot/" + action, {method: "POST"});
+    if (action === "stop") toast("info", "Stopped", "It left its voice channels and went offline.");
+  } catch (e) { toast("bad", `It would not ${action}`, e.message); }
+  poll();
+}
+$("#btn-start").onclick = () => power("start");
+$("#btn-stop").onclick = () => power("stop");
+$("#btn-restart").onclick = () => power("restart");
+$("#btn-invite").onclick = () => inviteUrl && window.open(inviteUrl, "_blank", "noopener");
+$("#btn-copy-invite").onclick = async () => {
+  try { await navigator.clipboard.writeText(inviteUrl); toast("ok", "Copied", "The invite link is on your clipboard."); }
+  catch { prompt("Copy the invite link:", inviteUrl); }
+};
+
+/* ---------- players: one panel per server ---------- */
+const playerEls = new Map();
+function paintPlayers(players, st) {
+  const root = $("#players");
+  const live = players.filter(p => p.current || p.queue_length);
+  if (!live.length) {
+    playerEls.clear();
+    const kind = st === "running" ? "quiet" : "off";
+    if (root.dataset.empty === kind) return;
+    root.dataset.empty = kind;
+    root.innerHTML = kind === "quiet"
+      ? `<div class="empty"><div style="position:relative"><div class="fox-halo"></div><img class="mascot fox" src="${M("nod")}" alt="" width="132" height="132" draggable="false"></div>
+         <h3>Nothing is playing</h3><p>Join a voice channel in Discord and use <code>/play</code> with a song, a link or a playlist. Its queue shows up here.</p></div>`
+      : `<div class="empty"><div style="position:relative"><div class="fox-halo"></div><img class="mascot fox" src="${M("idle")}" alt="" width="132" height="132" draggable="false"></div>
+         <h3>Nothing can play yet</h3><p>The bot is not connected. Start it from the top bar, and what it plays shows up here.</p></div>`;
+    return;
+  }
+  if (root.dataset.empty) { root.dataset.empty = ""; root.innerHTML = ""; }
+  const seen = new Set();
+  for (const p of live) {
+    seen.add(p.id);
+    let el = playerEls.get(p.id);
+    if (!el) {
+      el = document.createElement("section");
+      el.className = "panel";
+      el.innerHTML = `
+        <header><h3 class="g-name"></h3><span class="sp g-where"></span></header>
+        <div class="pad">
+          <div class="player-grid">
+            <img class="player-art" alt="" width="132" height="99">
+            <div style="min-width:0">
+              <a class="player-title" target="_blank" rel="noopener"></a>
+              <p class="player-meta"></p>
+              <div class="bar" role="progressbar" aria-label="How far into the song"><i></i></div>
+              <div class="times"><span class="pos"></span><span class="dur"></span></div>
+            </div>
+          </div>
+          <div class="player-ctl">
+            <div class="btnrow">
+              <button class="btn sm icon" type="button" data-a="toggle"><span class="p5-hl" aria-hidden="true"></span><span class="ico"></span></button>
+              <button class="btn sm icon" type="button" data-a="skip" aria-label="Skip this song"><span class="p5-hl" aria-hidden="true"></span>${svg("skip", 14)}</button>
+              <button class="btn sm icon" type="button" data-a="shuffle" aria-label="Shuffle the queue"><span class="p5-hl" aria-hidden="true"></span>${svg("shuffle", 14)}</button>
+              <button class="btn sm danger" type="button" data-a="stop"><span class="p5-hl" aria-hidden="true"></span>${svg("stop")}<span>Stop and leave</span></button>
+            </div>
+            <div class="seg" role="group" aria-label="Loop">
+              <button type="button" data-loop="off">No loop</button><button type="button" data-loop="track">Song</button><button type="button" data-loop="queue">Queue</button>
+            </div>
+            <div class="vol"><label>Volume</label><input type="range" min="0" max="200" step="5" aria-label="Volume"><output></output></div>
+          </div>
+          <div class="queue-wrap"></div>
+        </div>`;
+      el.querySelectorAll("button[data-a]").forEach(b => b.onclick = () => {
+        if (b.dataset.a === "stop" && !confirm(`Stop the music in ${el.p.name}? The queue is cleared and the bot leaves the voice channel.`)) return;
+        control(el.dataset.guild, b.dataset.a);
+      });
+      el.querySelectorAll("button[data-loop]").forEach(b => b.onclick = () => control(el.dataset.guild, "loop", b.dataset.loop));
+      const range = $("input[type=range]", el);
+      range.oninput = () => $("output", el).textContent = range.value + "%";
+      range.onchange = () => control(el.dataset.guild, "volume", +range.value);
+      root.appendChild(el);
+      playerEls.set(p.id, el);
+    }
+    el.dataset.guild = p.id;
+    el.p = p;
+    const c = p.current;
+    $(".g-name", el).textContent = p.name;
+    $(".g-where", el).textContent = [p.channel, p.listeners + " listening"].filter(Boolean).join(" · ");
+    const art = $(".player-art", el), want = (c && c.thumbnail) || "/ds/icon.png";
+    if (art.getAttribute("src") !== want) art.src = want;
+    const a = $(".player-title", el);
+    a.textContent = c ? c.title : "Between songs";
+    if (c && c.link) a.href = c.link; else a.removeAttribute("href");
+    $(".player-meta", el).innerHTML = [
+      p.paused ? `<span class="pill warn">Paused</span>` : c ? `<span class="pill ok">Playing</span>` : "",
+      c && c.source === "spotify" ? `<span class="pill ghost">Spotify</span>` : "",
+      c && c.requester ? "Asked for by " + esc(c.requester) : "",
+    ].join("");
+    const tg = $("button[data-a=toggle]", el);
+    tg.setAttribute("aria-label", p.paused ? "Resume" : "Pause");
+    $(".ico", tg).innerHTML = svg(p.paused ? "play" : "pause", 14);
+    el.querySelectorAll("button[data-loop]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.loop === p.loop)));
+    const range = $("input[type=range]", el);
+    if (document.activeElement !== range) { range.value = p.volume; $("output", el).textContent = p.volume + "%"; }
+    const sig = p.queue_length + "|" + p.queue.map(t => t.title).join("|");
+    if (el.sig !== sig) {
+      el.sig = sig;
+      const box = $(".queue-wrap", el);
+      box.innerHTML = !p.queue_length
+        ? `<p class="queue-more">Nothing is queued after this song.</p>`
+        : `<div class="tablewrap"><table class="tbl"><thead><tr><th class="num">#</th><th>Up next</th><th class="num">Length</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody>${
+            p.queue.map((t, i) => `<tr><td class="num">${i + 1}</td><td class="t">${esc(t.title)}</td><td class="num">${fmt(t.duration)}</td>
+              <td><button class="btn icon xs ghost" type="button" data-i="${i}" aria-label="Remove ${esc(t.title)} from the queue">${svg("x")}</button></td></tr>`).join("")
+          }</tbody></table></div>` + (p.queue_length > p.queue.length ? `<p class="queue-more">And ${p.queue_length - p.queue.length} more after these.</p>` : "");
+      box.querySelectorAll("button[data-i]").forEach(b => b.onclick = () => control(p.id, "remove", +b.dataset.i));
+    }
+  }
+  for (const [id, el] of playerEls) if (!seen.has(id)) { el.remove(); playerEls.delete(id); }
+  tickProgress();
+}
+function tickProgress() {
+  for (const el of playerEls.values()) {
+    const p = el.p, c = p && p.current;
+    const bar = $(".bar", el);
+    if (!c) { $(".bar i", el).style.width = "0"; $(".pos", el).textContent = ""; $(".dur", el).textContent = ""; continue; }
+    const pos = p.position + (p.paused ? 0 : (Date.now() - lastAt) / 1000);
+    const pct = c.duration ? Math.min(100, 100 * pos / c.duration) : 100;
+    $(".bar i", el).style.width = pct + "%";
+    bar.setAttribute("aria-valuenow", Math.round(pct));
+    $(".pos", el).textContent = fmt(pos);
+    $(".dur", el).textContent = fmt(c.duration);
+  }
+}
+async function control(guild, action, value) {
+  try {
+    await api("/api/control", {method: "POST", body: {guild, action, value}});
+    poll();
+  } catch (e) { toast("bad", "The bot did not take that", e.message); }
+}
+
+/* ---------- logs ---------- */
+const logs = [];
+let es = null, level = "all", unseenErrors = 0;
+const view = $("#logview");
+const CLS = {error: "err", warn: "warn", debug: "", info: ""};
+function logMatches(e) {
+  const f = $("#log-filter").value.toLowerCase();
+  if (level === "warn" && !["warn", "error"].includes(e.level)) return false;
+  if (level === "error" && e.level !== "error") return false;
+  return !f || e.text.toLowerCase().includes(f);
+}
+function logLine(e) {
+  const d = document.createElement("div");
+  d.className = "ln " + (e.text.includes(" panel: ") && e.level === "info" ? "chat" : CLS[e.level] || "");
+  d.textContent = e.text;
+  return d;
+}
+function rerenderLogs() {
+  view.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  logs.filter(logMatches).slice(-3000).forEach(e => frag.appendChild(logLine(e)));
+  view.appendChild(frag);
+  $("#log-count").textContent = logs.length + " lines";
+  scrollLogs(true);
+}
+function scrollLogs(force) { if (force || $("#log-follow").checked) view.scrollTop = view.scrollHeight; }
+function paintErrCount() {
+  const c = $("#err-count");
+  c.hidden = !unseenErrors;
+  c.textContent = unseenErrors > 99 ? "99+" : unseenErrors;
+  c.setAttribute("aria-label", unseenErrors + " new errors");
+}
+function connectLogs() {
+  if (es) es.close();
+  es = new EventSource("/api/logs/stream");
+  es.addEventListener("reset", () => { logs.length = 0; view.innerHTML = ""; });
+  es.onmessage = m => {
+    const e = JSON.parse(m.data);
+    logs.push(e);
+    if (logs.length > 6000) logs.splice(0, 1000);
+    if (e.level === "error" && screen !== "logs" && /\d\d:\d\d:\d\d ERROR/.test(e.text)) { unseenErrors++; paintErrCount(); }
+    if (logMatches(e)) {
+      view.appendChild(logLine(e));
+      while (view.childElementCount > 3000) view.firstChild.remove();
+      scrollLogs(false);
+    }
+    $("#log-count").textContent = logs.length + " lines";
+  };
+}
+$("#log-filter").oninput = rerenderLogs;
+document.querySelectorAll(".seg button[data-level]").forEach(b => b.onclick = () => {
+  level = b.dataset.level;
+  document.querySelectorAll(".seg button[data-level]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  rerenderLogs();
+});
+$("#log-follow").onchange = () => scrollLogs(false);
+view.onscroll = () => {
+  const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 30;
+  if ($("#log-follow").checked !== atBottom) $("#log-follow").checked = atBottom;
+};
+$("#log-download").onclick = () => { window.location.href = "/api/logs/download"; };
+$("#log-clear").onclick = async () => {
+  try { await api("/api/logs/clear", {method: "POST"}); logs.length = 0; view.innerHTML = ""; $("#log-count").textContent = "0 lines"; }
+  catch (e) { toast("bad", "The view was not cleared", e.message); }
+};
+
+/* ---------- settings ---------- */
+const FIELDS = ["discord_token", "spotify_client_id", "spotify_client_secret", "default_volume", "idle_timeout",
+                "max_playlist", "max_queue", "ffmpeg_path", "autostart", "auto_restart", "update_ytdlp_on_start"];
+async function loadSettings() {
+  try {
+    const s = await api("/api/settings");
+    const where = $("#st-where");
+    where.textContent = s.data_dir.split(/[\\/]/).filter(Boolean).pop() + "/settings.json";
+    where.title = s.data_dir;
+    for (const k of FIELDS) {
+      const el = $("#s-" + k);
+      el.disabled = s.env_locked.includes(k);
+      const host = el.closest(".field") || el.closest(".switch");
+      host.querySelectorAll(".locked").forEach(x => x.remove());
+      if (el.disabled) host.insertAdjacentHTML("beforeend", `<span class="locked">Set by an environment variable where the panel runs, so it is changed there.</span>`);
+      if (el.type === "checkbox") el.checked = !!s[k];
+      else if (s[k] && typeof s[k] === "object") {
+        el.value = "";
+        el.placeholder = s[k].set ? `Saved, ending ${s[k].hint}` : "Not set";
+      } else el.value = s[k];
+    }
+  } catch (e) { toast("bad", "Settings did not load", e.message); }
+}
+$("#settings-reload").onclick = () => { loadSettings(); toast("info", "Changes discarded", "The fields show what is saved."); };
+$("#settings-form").onsubmit = async ev => {
+  ev.preventDefault();
+  const body = {};
+  for (const k of FIELDS) {
+    const el = $("#s-" + k);
+    if (!el.disabled) body[k] = el.type === "checkbox" ? el.checked : el.value;
+  }
+  try {
+    const r = await api("/api/settings", {method: "POST", body});
+    if (r.restart_needed) toast("ok", "Saved", "The bot uses them after a restart.", {label: "Restart now", run: () => power("restart")});
+    else toast("ok", "Saved", "They apply the next time the bot starts.");
+    loadSettings();
+    poll();
+  } catch (err) { toast("bad", "Not saved", err.message); }
+};
+$("#clear-spotify").onclick = async () => {
+  if (!confirm("Remove the Spotify keys? Spotify links keep working through the public page, up to 100 songs per playlist.")) return;
+  try { await api("/api/settings", {method: "POST", body: {clear_spotify: true}}); toast("ok", "Spotify keys removed", "Playlists are read from the public page again."); loadSettings(); }
+  catch (err) { toast("bad", "The keys were not removed", err.message); }
+};
+
+/* ---------- upkeep ---------- */
+async function loadUpkeep() {
+  try {
+    const v = await api("/api/versions");
+    $("#up-where").textContent = v.docker ? "Docker" : "this computer";
+    $("#ytdlp-ver").textContent = v["yt-dlp"] ? "Version " + v["yt-dlp"] : "";
+    $("#versions").innerHTML = Object.entries(v).filter(([k]) => k !== "docker").map(([k, x]) =>
+      `<tr><td>${esc(k)}</td><td class="num">${x ? esc(x) : '<span class="pill bad">Missing</span>'}</td></tr>`).join("");
+    const s = await api("/api/settings");
+    $("#cookie-pill").innerHTML = s.has_cookies ? `<span class="pill ok">Uploaded</span>` : `<span class="pill dead">None</span>`;
+    $("#btn-cookie-del").hidden = !s.has_cookies;
+  } catch (e) { toast("bad", "Upkeep did not load", e.message); }
+}
+$("#btn-update").onclick = async () => {
+  const b = $("#btn-update");
+  b.classList.add("busy");
+  b.disabled = true;
+  $("#update-note").innerHTML = `<div class="loading-fox" style="margin:12px 0"><img class="mascot" src="${M("run")}" alt="" width="56" height="56" draggable="false"><span>Asking pip for the newest yt-dlp<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></span></div>`;
+  try {
+    const r = await api("/api/maintenance/update-ytdlp", {method: "POST"});
+    if (r.changed && r.running) toast("ok", `yt-dlp ${r.version}`, "Updated. The bot uses it after a restart.", {label: "Restart now", run: () => power("restart")});
+    else if (r.changed) toast("ok", `yt-dlp ${r.version}`, "Updated. The bot uses it when it starts.");
+    else toast("info", "Already up to date", `yt-dlp ${r.version} is the newest.`);
+    loadUpkeep();
+  } catch (e) { toast("bad", "The update failed", e.message + " The log has pip's output."); }
+  $("#update-note").innerHTML = "";
+  b.classList.remove("busy");
+  b.disabled = false;
+};
+$("#btn-cookie-pick").onclick = () => $("#cookie-file").click();
+$("#cookie-file").onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    await api("/api/cookies", {method: "POST", body: {text: await f.text()}});
+    toast("ok", "Cookies saved", "They are used from the next song on.");
+    loadUpkeep();
+  } catch (err) { toast("bad", "Those cookies were not saved", err.message); }
+};
+$("#btn-cookie-del").onclick = async () => {
+  if (!confirm("Remove the YouTube cookies? Age-restricted videos stop working, and YouTube may ask the bot to sign in again.")) return;
+  try { await api("/api/cookies", {method: "DELETE"}); toast("info", "Cookies removed", "The bot plays without them from the next song on."); loadUpkeep(); }
+  catch (e) { toast("bad", "The cookies were not removed", e.message); }
+};
+$("#pw-form").onsubmit = async ev => {
+  ev.preventDefault();
+  try {
+    await api("/api/password", {method: "POST", body: {current: $("#pw-cur").value, new: $("#pw-new").value}});
+    $("#pw-cur").value = $("#pw-new").value = "";
+    toast("ok", "Password changed", "Use the new one from now on.");
+  } catch (err) { toast("bad", "The password was not changed", err.message); }
+};
+$("#logout-btn").onclick = async () => {
+  try { await api("/api/logout", {method: "POST"}); } catch {}
+  if (es) es.close();
+  timers.forEach(clearInterval);
+  showGate(false);
+};
+
+/* ---------- start ---------- */
+let timers = [];
+function enterApp() {
+  $("#gate").hidden = true;
+  $("#shell").hidden = false;
+  paintTheme();
+  timers.forEach(clearInterval);
+  timers = [setInterval(() => { if (!document.hidden) poll(); }, 2000), setInterval(tickProgress, 1000)];
+  connectLogs();
+  route();
+  poll();
+}
+(async () => {
+  try {
+    const a = await fetch("/api/auth").then(r => r.json());
+    if (a.logged_in) enterApp(); else showGate(a.setup);
+  } catch { showGate(false); gateError("The panel is not answering. Check that it is running."); }
+})();
+</script>
+</body>
+</html>

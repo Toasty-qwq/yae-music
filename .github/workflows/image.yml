@@ -1,0 +1,66 @@
+# Builds the Docker image on every push to main and publishes it to GitHub's registry
+# (ghcr.io/<you>/<repo>:latest) for both amd64 and arm64 servers. The run's summary page
+# shows the compose file to paste into CasaOS, already filled in with this image's name.
+name: Build the CasaOS image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Image name (the registry wants it in lower case)
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.name.outputs.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=sha,format=short
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: The compose file to paste into CasaOS
+        run: |
+          icon="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/musicbot/panel/static/ds/icon.png"
+          sed -e "s#__IMAGE__#${{ steps.name.outputs.image }}:latest#" -e "s#__ICON__#${icon}#" \
+            casaos/docker-compose.yml > casaos-compose.yml
+          {
+            echo "## Install on CasaOS"
+            echo "App Store → **Custom Install** → **Import** (top right), paste this, then **Submit** and **Install**."
+            echo "First time only: make the package public (your GitHub profile → Packages → this image → Package settings → Change visibility → Public), or CasaOS can't download it."
+            echo '```yaml'
+            cat casaos-compose.yml
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

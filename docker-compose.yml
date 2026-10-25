@@ -1,0 +1,24 @@
+# Build-it-yourself route (needs a shell on the server):
+#   docker compose up -d --build        then open http://<server-ip>:8484
+# For the CasaOS App Store route, use casaos/docker-compose.yml (the image GitHub builds).
+# Both keep the token, settings, logs and cookies in /DATA/AppData/yae-music on the host.
+name: yae-music
+services:
+  yae-music:
+    build: .
+    image: yae-music:local
+    container_name: yae-music
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "8484:8484"
+    volumes:
+      - /DATA/AppData/yae-music:/data
+    environment:
+      TZ: Etc/UTC                     # your time zone, e.g. Europe/London, America/New_York
+      # Optional. Set these here instead of in the panel if you prefer;
+      # a value set here can't be changed from the panel.
+      # DISCORD_TOKEN: ""
+      # PANEL_PASSWORD: ""          # also the way back in if you forget the panel password
+      # SPOTIFY_CLIENT_ID: ""
+      # SPOTIFY_CLIENT_SECRET: ""

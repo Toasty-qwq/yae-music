@@ -1,0 +1,64 @@
+/* Music-bot pieces built on the Shrine Fox system: tokens only, no hex values.
+   Load order: tokens.css, bundle.css, then this. */
+
+/* bundle.css resets --backdrop to none; the scene is per theme and lives beside this file */
+:root[data-theme="light"]{--backdrop:url("sakura-light.svg")}
+:root[data-theme="dark"]{--backdrop:url("sakura-dark.svg")}
+
+.stack{display:grid;gap:var(--sp-5)}
+.page-intro{margin-bottom:var(--sp-5)}
+.screen[hidden]{display:none!important}
+
+/* --- facts list (Bot panel, versions) --- */
+.facts{display:grid;gap:0;margin:var(--sp-3) 0 0}
+.facts > div{display:flex;justify-content:space-between;gap:var(--sp-3);padding:7px 0;
+  border-bottom:2px solid var(--rule-2)}
+.facts > div:last-child{border-bottom:0}
+.facts dt{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);align-self:center}
+.facts dd{margin:0;font-family:var(--num);font-weight:800;font-size:13.5px;
+  font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere}
+.bot-id{display:flex;align-items:center;gap:var(--sp-4)}
+.bot-id .who{min-width:0}
+.bot-id .who b{display:block;font-family:var(--brush);font-weight:400;font-size:19px;line-height:1.1;
+  overflow-wrap:anywhere}
+.bot-id .who span{font-size:12.5px;color:var(--mid)}
+
+/* --- a server's player --- */
+.player-grid{display:grid;grid-template-columns:132px minmax(0,1fr);gap:var(--sp-4);align-items:start}
+.player-art{width:132px;height:99px;object-fit:cover;display:block;background:var(--paper-2);
+  border:var(--edge) solid var(--slab-bg);box-shadow:3px 3px 0 var(--sakura)}
+.player-title{font-family:var(--body);font-weight:700;font-size:16px;line-height:1.35;display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-meta{font-size:12.5px;color:var(--mid);margin:2px 0 var(--sp-3)}
+.player-meta .pill{margin-right:6px;vertical-align:1px}
+.times{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;
+  color:var(--faint);margin-top:6px;font-variant-numeric:tabular-nums}
+.player-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:var(--sp-4)}
+.player-ctl .btnrow{margin:0}
+.vol{display:flex;align-items:center;gap:var(--sp-2);margin-left:auto}
+.vol label{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.vol input{accent-color:var(--rose);width:140px}
+.vol output{font-family:var(--num);font-weight:800;font-size:12.5px;font-variant-numeric:tabular-nums;
+  min-width:3.4em;text-align:right}
+.queue-wrap{margin-top:var(--sp-4);max-height:340px;overflow:auto}
+.queue-wrap .tbl td.t{max-width:0;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue-more{font-size:12.5px;color:var(--mid);margin:var(--sp-2) 0 0}
+
+/* --- logs --- */
+.logbar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:var(--sp-3)}
+.logbar .inp{flex:1 1 200px;min-width:0;height:36px;padding-top:0;padding-bottom:0}
+#logview{height:calc(100dvh - 330px);min-height:320px}
+
+/* --- settings / upkeep --- */
+.panel .pad > .field:last-child{margin-bottom:0}
+.switches{display:grid;gap:var(--sp-3)}
+.form-foot{display:flex;justify-content:flex-end;margin-top:var(--sp-5)}
+.locked{display:block;font-size:12.5px;color:var(--amber-ink);margin-top:4px}
+
+@media (max-width:620px){
+  .player-grid{grid-template-columns:minmax(0,1fr)}
+  .player-art{width:100%;height:auto;aspect-ratio:16/9}
+  .vol{margin-left:0;width:100%}
+  .vol input{flex:1}
+}

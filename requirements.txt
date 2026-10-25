@@ -1,0 +1,10 @@
+# discord.py 2.7+ is required: Discord only lets bots into voice with DAVE encryption (via "davey").
+discord.py[voice]>=2.7.1,<3
+# Unpinned on purpose: YouTube changes often and old yt-dlp versions stop working.
+# [deno] installs the JavaScript runtime yt-dlp needs for YouTube.
+yt-dlp[default,deno]
+aiohttp>=3.9
+# YouTube Music search: lets Spotify songs be matched by artist + exact length.
+ytmusicapi>=1.10
+# Audio check that a re-uploaded song is the same recording as the Spotify track.
+numpy>=1.26

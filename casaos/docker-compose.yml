@@ -1,0 +1,52 @@
+# CasaOS app for Yae Music. The GitHub workflow fills in __IMAGE__ and __ICON__ and prints the
+# result on the run's summary page; paste that version into CasaOS (App Store > Custom Install >
+# Import). To fill it in by hand, __IMAGE__ is ghcr.io/<your github name>/<repo name>:latest.
+name: yae-music
+services:
+  yae-music:
+    image: __IMAGE__
+    container_name: yae-music
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - target: 8484
+        published: "8484"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: /DATA/AppData/yae-music
+        target: /data
+    environment:
+      TZ: Etc/UTC
+    x-casaos:
+      envs:
+        - container: TZ
+          description:
+            en_us: Time zone for the log timestamps, e.g. Europe/London or America/New_York
+      ports:
+        - container: "8484"
+          description:
+            en_us: Control panel
+      volumes:
+        - container: /data
+          description:
+            en_us: Bot token, settings, logs and YouTube cookies
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: yae-music
+  category: Media
+  author: shado
+  developer: shado
+  icon: __ICON__
+  tagline:
+    en_us: Discord music bot for YouTube and Spotify
+  description:
+    en_us: Plays YouTube and Spotify songs and playlists in Discord voice channels. The control panel shows the live log, starts and stops the bot, shows what each server is playing, and holds the bot's settings.
+  title:
+    en_us: Yae Music
+  index: /
+  port_map: "8484"
+  scheme: http
