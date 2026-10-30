@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import json
 import logging
 import logging.handlers
 import os
@@ -219,21 +220,19 @@ class Supervisor:
                 return await r.json(content_type=None)
 
     async def bot_proxy(self, method: str, path: str, query: dict, body: bytes | None,
-                        timeout: float = 45) -> tuple[int, dict]:
-        """Forward a dashboard request to the bot; returns (HTTP status, JSON)."""
+                        timeout: float = 60) -> tuple[int, str, bytes]:
+        """Forward a dashboard request to the bot; returns (HTTP status, content type, body)."""
+        def problem(status: int, text: str):
+            return status, "application/json", json.dumps({"error": text}).encode()
         if not self.running:
-            return 503, {"error": "The bot isn't running, so server settings can't be read right now."}
+            return problem(503, "The bot isn't running, so server settings can't be read right now.")
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as s:
                 async with s.request(method, f"http://127.0.0.1:{self.api_port}{path}", params=query, data=body,
                                      headers={"X-Token": self.api_token, "Content-Type": "application/json"}) as r:
-                    try:
-                        data = await r.json(content_type=None)
-                    except ValueError:
-                        data = {"error": (await r.text())[:300] or f"HTTP {r.status}"}
-                    return r.status, data if isinstance(data, dict) else {"data": data}
+                    return r.status, r.content_type or "application/json", await r.read()
         except (aiohttp.ClientError, asyncio.TimeoutError):
-            return 503, {"error": "The bot didn't answer. It may still be connecting to Discord."}
+            return problem(503, "The bot didn't answer. It may still be connecting to Discord.")
 
     def status(self) -> dict:
         return {

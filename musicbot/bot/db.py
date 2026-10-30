@@ -46,6 +46,61 @@ CREATE TABLE IF NOT EXISTS cases (
     PRIMARY KEY (guild_id, case_no)
 );
 CREATE INDEX IF NOT EXISTS cases_by_user ON cases(guild_id, user_id);
+CREATE TABLE IF NOT EXISTS tags (
+    guild_id   INTEGER NOT NULL,
+    name       TEXT NOT NULL,
+    message    TEXT NOT NULL,           -- JSON message (content + embed)
+    owner_id   INTEGER NOT NULL,
+    uses       INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (guild_id, name)
+);
+CREATE TABLE IF NOT EXISTS posts (       -- messages posted from the dashboard (editable later)
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    INTEGER NOT NULL,
+    channel_id  INTEGER NOT NULL,
+    message_id  INTEGER,
+    name        TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    created_at  REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS starboard (
+    guild_id        INTEGER NOT NULL,
+    message_id      INTEGER NOT NULL,
+    channel_id      INTEGER NOT NULL,
+    star_message_id INTEGER,
+    stars           INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, message_id)
+);
+CREATE TABLE IF NOT EXISTS suggestions (
+    guild_id   INTEGER NOT NULL,
+    number     INTEGER NOT NULL,
+    author_id  INTEGER NOT NULL,
+    content    TEXT NOT NULL,
+    channel_id INTEGER,
+    message_id INTEGER,
+    status     TEXT NOT NULL DEFAULT 'open',
+    mod_id     INTEGER,
+    reason     TEXT,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (guild_id, number)
+);
+CREATE TABLE IF NOT EXISTS reminders (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    guild_id   INTEGER,
+    channel_id INTEGER,
+    due        REAL NOT NULL,
+    text       TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reminders_due ON reminders(due);
+CREATE TABLE IF NOT EXISTS member_roles (  -- roles to give back when someone rejoins
+    guild_id INTEGER NOT NULL,
+    user_id  INTEGER NOT NULL,
+    role_ids TEXT NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+);
 """
 
 
@@ -67,6 +122,23 @@ class Database:
 
     async def close(self) -> None:
         await self.conn.close()
+
+    # ---- small helpers for the simpler features ------------------------------------------------
+
+    async def run(self, sql: str, args: tuple | list = ()) -> int:
+        """Execute and commit; returns the new row id (for inserts)."""
+        cur = await self.conn.execute(sql, args)
+        await self.conn.commit()
+        return cur.lastrowid
+
+    async def one(self, sql: str, args: tuple | list = ()) -> dict | None:
+        async with self.conn.execute(sql, args) as cur:
+            row = await cur.fetchone()
+        return dict(row) if row else None
+
+    async def all(self, sql: str, args: tuple | list = ()) -> list[dict]:
+        async with self.conn.execute(sql, args) as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
     # ---- guild config ----------------------------------------------------------------------
 

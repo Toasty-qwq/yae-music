@@ -1,10 +1,15 @@
-/* The server dashboard: a server picker, then one server's settings on the ofuda shelf.
-   Uses the helpers from index.html ($, esc, api, toast, svg, M). Every save is validated again by
-   the bot, which also checks that the signed-in person has Manage Server there. */
+/* The server dashboard: a server picker, then one server's settings on the ofuda shelf, plus the
+   Commands guide. Uses the helpers from index.html ($, esc, api, toast, svg, M). Every save is
+   validated again by the bot, which also checks the signed-in person has Manage Server there. */
 (() => {
 const TABS = [
   {id: "welcome", kanji: "迎", label: "Welcome", group: "People"},
   {id: "roles", kanji: "役", label: "Roles", group: "People"},
+  {id: "messages", kanji: "文", label: "Messages", group: "Posts"},
+  {id: "tags", kanji: "札", label: "Tags", group: "Posts"},
+  {id: "replies", kanji: "響", label: "Auto-replies", group: "Posts"},
+  {id: "starboard", kanji: "星", label: "Starboard", group: "Community"},
+  {id: "suggestions", kanji: "案", label: "Suggestions", group: "Community"},
   {id: "moderation", kanji: "守", label: "Moderation", group: "Safety"},
   {id: "logging", kanji: "記", label: "Logging", group: "Safety"},
 ];
@@ -17,30 +22,30 @@ const LOGS = [
 ];
 const KIND_WORD = {buttons: "Buttons", dropdown: "Dropdown", reactions: "Reactions"};
 const MODE_WORD = {normal: "Click to get, click again to lose", unique: "One role at a time", verify: "Get only, never taken away"};
+const MATCH_WORD = {contains: "Anywhere in the message", word: "As a whole word", exact: "The whole message", starts: "At the start"};
 const ACTION_PILL = {ban: "bad", unban: "ok", kick: "warn", timeout: "warn", untimeout: "ok", warn: "gold"};
 const ACTION_WORD = {ban: "Ban", unban: "Unban", kick: "Kick", timeout: "Timeout", untimeout: "Timeout ended", warn: "Warning"};
-const COMMANDS = [
-  ["/ban", "Ban, for good or for a while (e.g. 1d, 2w)", "Ban Members"],
-  ["/unban", "Lift a ban by user ID", "Ban Members"],
-  ["/kick", "Kick someone out", "Kick Members"],
-  ["/timeout · /untimeout", "Mute someone for up to 28 days, or end it early", "Timeout Members"],
-  ["/warn · /warnings", "Warn someone, see someone's history", "Timeout Members"],
-  ["/case · /reason", "Look up a case, change its reason", "Timeout Members"],
-  ["/purge", "Delete recent messages, optionally from one person", "Manage Messages"],
-];
+const EMPTY_EMBED = {enabled: false, color: "#f2879f", author_name: "", author_icon: "", author_url: "", title: "", url: "",
+  description: "", thumbnail: "", image: "", footer: "", footer_icon: "", timestamp: false, fields: []};
+const newMessage = (content = "") => ({content, embed: JSON.parse(JSON.stringify(EMPTY_EMBED))});
 
-let G = null;           // the open server: {guild, channels, roles, emojis, config, menus, ...}
+let G = null;           // the open server
 let tab = "welcome";
-let editing = null;     // the reaction-role menu being edited (a copy), or null
+let editing = null;     // what an editor on the current tab is working on (a copy), or null
 let casePage = 0, caseUser = "";
 
 const root = () => $("#dash-root");
+const body = () => $("#tab-body");
 const field = (id, label, inner, help = "") =>
   `<div class="field"><label for="${id}">${label}</label>${inner}${help ? `<div class="help">${help}</div>` : ""}</div>`;
 const sw = (id, label, on) =>
   `<label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span class="track"></span>${label}</label>`;
 const btn = (id, label, cls = "", icon = "") =>
   `<button class="btn ${cls}" type="button" id="${id}">${cls.includes("ghost") ? "" : '<span class="p5-hl" aria-hidden="true"></span>'}${icon ? svg(icon) : ""}<span>${esc(label)}</span></button>`;
+const val = id => $("#" + id).value;
+const on = id => $("#" + id).checked;
+const loading = text => `<div class="loading-fox"><img class="mascot" src="${M("run")}" alt="" width="56" height="56"><span>${esc(text)}<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></span></div>`;
+const emptyState = (fox, title, text) => `<div class="empty"><div style="position:relative"><div class="fox-halo"></div><img class="mascot fox" src="${M(fox)}" alt="" width="132" height="132"></div><h3>${esc(title)}</h3><p>${text}</p></div>`;
 
 function channelSelect(id, value, none = "Not set") {
   const groups = {};
@@ -49,19 +54,19 @@ function channelSelect(id, value, none = "Not set") {
     `<option value="${c.id}" ${c.id === value ? "selected" : ""} ${c.can_send ? "" : "disabled"}>#${esc(c.name)}${c.can_send ? "" : " (the bot can't post here)"}</option>`).join("")}</optgroup>`).join("");
   return `<select id="${id}"><option value="">${esc(none)}</option>${opts}</select>`;
 }
-function roleChips(name, selected) {
-  return `<div class="chiprow" data-roles="${name}">${G.roles.map(r =>
-    `<button class="chip" type="button" data-id="${r.id}" aria-pressed="${selected.includes(r.id)}" ${r.problem ? "disabled" : ""}
-      title="${esc(r.problem || "")}">${r.color ? `<span aria-hidden="true" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(r.color)};margin-right:6px"></span>` : ""}@${esc(r.name)}</button>`).join("")}</div>`;
+function chips(name, items, selected) {
+  return `<div class="chiprow" data-chips="${name}">${items.map(it =>
+    `<button class="chip" type="button" data-id="${it.id}" aria-pressed="${selected.includes(it.id)}" ${it.problem ? "disabled" : ""}
+      title="${esc(it.problem || "")}">${it.dot ? `<span aria-hidden="true" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(it.dot)};margin-right:6px"></span>` : ""}${esc(it.label)}</button>`).join("")}</div>`;
 }
-const pickedRoles = name => [...root().querySelectorAll(`[data-roles="${name}"] .chip[aria-pressed="true"]`)].map(b => b.dataset.id);
+const roleChips = (name, sel) => chips(name, G.roles.map(r => ({id: r.id, label: "@" + r.name, dot: r.color, problem: r.problem})), sel);
+const channelChips = (name, sel) => chips(name, G.channels.map(c => ({id: c.id, label: "#" + c.name})), sel);
+const picked = name => [...root().querySelectorAll(`[data-chips="${name}"] .chip[aria-pressed="true"]`)].map(b => b.dataset.id);
 function wireChips() {
-  root().querySelectorAll(".chiprow .chip").forEach(b => b.onclick = () => b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")));
+  root().querySelectorAll(".chiprow[data-chips] .chip").forEach(b => b.onclick = () => b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")));
 }
-const val = id => $("#" + id).value;
-const on = id => $("#" + id).checked;
 
-async function save(section, data, okText) {
+async function saveSection(section, data, okText) {
   try {
     const r = await api(`/api/dash/guild/${G.guild.id}/config`, {method: "POST", body: {section, data}});
     G.config[section] = r.data;
@@ -70,40 +75,164 @@ async function save(section, data, okText) {
   } catch (e) { toast("bad", "Not saved", e.message); return false; }
 }
 
-/* ---------- entry points (index.html calls these) ---------- */
+/* =====================================================================================
+   The embed builder: content + an embed built field by field, with a live preview
+   ===================================================================================== */
+const B = new Map();  // builder id -> the message it edits (kept in sync while typing)
+const mediaUrl = v => v.startsWith("upload:") ? `/api/dash/guild/${G.guild.id}/media/${encodeURIComponent(v.slice(7))}` : v;
+
+function sample(text, isUrl = false) {
+  const me = (window.ME && ME.user) || {};
+  const map = {
+    "user": "@" + (me.name || "NewMember"), "mention": "@" + (me.name || "NewMember"), "user.mention": "@" + (me.name || "NewMember"),
+    "user.name": me.name || "newmember", "user.display": me.name || "New Member", "user.nick": me.name || "New Member",
+    "user.id": me.id || "123456789012345678", "user.avatar": me.avatar || "/ds/icon.png", "user.icon": me.avatar || "/ds/icon.png",
+    "user.created": "2 years ago", "server": G.guild.name, "server.name": G.guild.name, "server.icon": G.guild.icon || "",
+    "server.id": G.guild.id, "membercount": String(G.guild.members ?? 0), "server.members": String(G.guild.members ?? 0), "channel": "#welcome",
+  };
+  return (text || "").replace(/\{(user|mention|server|membercount|channel)(?:[.(]([a-z_]+)\)?)?\}/gi, (m, k, a) => {
+    const key = (k + (a ? "." + a : "")).toLowerCase().replace("(", ".");
+    return key in map ? map[key] : m;
+  });
+}
+function md(text) {  // just enough markdown for a believable preview
+  return esc(sample(text)).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*]+)\*/g, "$1<i>$2</i>")
+    .replace(/__(.+?)__/g, "<u>$1</u>").replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\n/g, "<br>")
+    .replace(/(@[\w .-]{1,32}?)(?=$|[\s,.!?<])/g, '<span class="dc-mention">$1</span>');
+}
+const img = v => { const u = mediaUrl(sample(v, true)); return /^(https?:\/\/|\/)/.test(u) ? esc(u) : ""; };
+
+function preview(msg) {
+  const e = msg.embed;
+  const a = e.enabled ? `<div class="dc-embed" style="border-left-color:${esc(e.color)}">
+      <div class="dc-embed-main">
+        ${e.author_name ? `<div class="dc-author">${img(e.author_icon) ? `<img src="${img(e.author_icon)}" alt="">` : ""}<span>${md(e.author_name)}</span></div>` : ""}
+        ${e.title ? `<div class="dc-title">${md(e.title)}</div>` : ""}
+        ${e.description ? `<div class="dc-desc">${md(e.description)}</div>` : ""}
+        ${e.fields.length ? `<div class="dc-fields">${e.fields.map(f => `<div class="dc-field ${f.inline ? "inline" : ""}"><b>${md(f.name)}</b><div>${md(f.value)}</div></div>`).join("")}</div>` : ""}
+        ${img(e.image) ? `<img class="dc-image" src="${img(e.image)}" alt="">` : ""}
+        ${e.footer || e.timestamp ? `<div class="dc-footer">${img(e.footer_icon) ? `<img src="${img(e.footer_icon)}" alt="">` : ""}<span>${md(e.footer)}${e.footer && e.timestamp ? " · " : ""}${e.timestamp ? "Today at " + new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : ""}</span></div>` : ""}
+      </div>${img(e.thumbnail) ? `<img class="dc-thumb" src="${img(e.thumbnail)}" alt="">` : ""}</div>` : "";
+  return `<div class="dc-msg"><img class="dc-avatar" src="/ds/icon.png" alt=""><div style="min-width:0"><div class="dc-name">Yae Music <span class="dc-app">APP</span></div>
+    ${msg.content ? `<div class="dc-content">${md(msg.content)}</div>` : ""}${a}</div></div>`;
+}
+
+function builder(id, msg, {contentLabel = "Text", contentHelp = ""} = {}) {
+  B.set(id, msg);
+  const e = msg.embed;
+  const up = key => `<button class="btn icon xs ghost" type="button" data-up="${key}" aria-label="Upload a picture or GIF">${svg("upload")}</button>`;
+  const urlIn = (key, label, ph) => `<div class="field"><label>${label}</label><div class="b-url"><input class="inp" data-k="${key}" value="${esc(e[key])}" placeholder="${ph}">${up(key)}</div></div>`;
+  const help = "Placeholders: " + Object.keys(G.placeholders).map(k => `<code>${esc(k)}</code>`).join(" ");
+  return `<div class="builder" id="b-${id}">
+    <div class="b-edit">
+      ${field(`b-${id}-content`, contentLabel, `<textarea id="b-${id}-content" data-k="content" rows="3" maxlength="2000" style="font-family:var(--body);font-size:15px">${esc(msg.content)}</textarea>`, contentHelp || help)}
+      <div class="switches" style="margin-bottom:12px">${sw(`b-${id}-embed`, "Add an embed", e.enabled)}</div>
+      <div class="b-embed" ${e.enabled ? "" : "hidden"}>
+        <div class="b-row3">${urlIn("author_icon", "Author icon", "Link or {user.avatar}")}
+          <div class="field"><label>Author name</label><input class="inp" data-k="author_name" maxlength="256" value="${esc(e.author_name)}"></div>
+          <div class="field"><label>Author link</label><input class="inp" data-k="author_url" value="${esc(e.author_url)}" placeholder="https://"></div></div>
+        <div class="b-row2"><div class="field"><label>Title</label><input class="inp" data-k="title" maxlength="256" value="${esc(e.title)}"></div>
+          <div class="field"><label>Title link</label><input class="inp" data-k="url" value="${esc(e.url)}" placeholder="https://"></div></div>
+        <div class="field"><label>Description <span class="b-count" data-for="description"></span></label><textarea class="inp" data-k="description" rows="5" maxlength="4096" style="font-family:var(--body);font-size:15px">${esc(e.description)}</textarea></div>
+        <div class="field"><label>Fields <span class="muted">(${e.fields.length}/25)</span></label>
+          ${e.fields.map((f, i) => `<div class="b-fieldrow" data-i="${i}"><input class="inp" data-f="name" maxlength="256" value="${esc(f.name)}" placeholder="Name">
+            <input class="inp" data-f="value" maxlength="1024" value="${esc(f.value)}" placeholder="Value">
+            <label class="switch" title="Side by side with its neighbours"><input type="checkbox" data-f="inline" ${f.inline ? "checked" : ""}><span class="track"></span>Inline</label>
+            <button class="btn icon xs ghost" type="button" data-rmf="${i}" aria-label="Remove this field">${svg("x")}</button></div>`).join("")}
+          <button class="btn sm" type="button" data-addf ${e.fields.length >= 25 ? "disabled" : ""}><span class="p5-hl" aria-hidden="true"></span>${svg("plus")}<span>Add a field</span></button></div>
+        <div class="b-row2">${urlIn("image", "Image, big at the bottom", "Link to a picture or GIF")}${urlIn("thumbnail", "Thumbnail, small at the top right", "Link or {user.avatar}")}</div>
+        <div class="b-row3"><div class="field"><label>Footer</label><input class="inp" data-k="footer" maxlength="2048" value="${esc(e.footer)}"></div>
+          ${urlIn("footer_icon", "Footer icon", "Link or {server.icon}")}
+          <div class="field"><label>Colour</label><input type="color" data-k="color" value="${esc(e.color)}" style="height:44px;padding:4px;width:100%"></div></div>
+        <div class="switches">${sw(`b-${id}-ts`, "Show the time it was posted", e.timestamp)}</div>
+      </div>
+      <input type="file" hidden accept="image/png,image/jpeg,image/gif,image/webp" class="b-file">
+    </div>
+    <div class="b-preview"><div class="b-preview-label">Preview</div><div class="b-preview-box"></div>
+      <p class="help">Placeholders show sample values here. GIFs move in Discord too.</p></div>
+  </div>`;
+}
+function wireBuilder(id) {
+  const box = $("#b-" + id), msg = B.get(id), e = msg.embed;
+  const paint = () => {
+    $(".b-preview-box", box).innerHTML = preview(msg);
+    const c = $('[data-for="description"]', box);
+    if (c) c.textContent = `${e.description.length}/4096`;
+  };
+  box.querySelectorAll("[data-k]").forEach(inp => inp.oninput = () => {
+    if (inp.dataset.k === "content") msg.content = inp.value; else e[inp.dataset.k] = inp.value;
+    paint();
+  });
+  box.querySelectorAll(".b-fieldrow").forEach(row => row.querySelectorAll("[data-f]").forEach(inp => inp.oninput = inp.onchange = () => {
+    const f = e.fields[+row.dataset.i];
+    f[inp.dataset.f] = inp.type === "checkbox" ? inp.checked : inp.value;
+    paint();
+  }));
+  $(`#b-${id}-embed`).onchange = ev => { e.enabled = ev.target.checked; $(".b-embed", box).hidden = !e.enabled; paint(); };
+  $(`#b-${id}-ts`).onchange = ev => { e.timestamp = ev.target.checked; paint(); };
+  const redraw = () => { const host = box.parentElement; host.innerHTML = builder(id, msg); wireBuilder(id); };
+  box.querySelector("[data-addf]").onclick = () => { e.fields.push({name: "", value: "", inline: false}); redraw(); };
+  box.querySelectorAll("[data-rmf]").forEach(b => b.onclick = () => { e.fields.splice(+b.dataset.rmf, 1); redraw(); });
+  const file = $(".b-file", box);
+  let target = null;
+  box.querySelectorAll("[data-up]").forEach(b => b.onclick = () => { target = b.dataset.up; file.click(); });
+  file.onchange = async () => {
+    const f = file.files[0];
+    file.value = "";
+    if (!f || !target) return;
+    if (f.size > 8 * 1024 * 1024) return toast("bad", "That file is too big", "Uploads can be up to 8 MB.");
+    const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.readAsDataURL(f); });
+    try {
+      const r = await api(`/api/dash/guild/${G.guild.id}/media`, {method: "POST", body: {filename: f.name, data}});
+      e[target] = r.token;
+      redraw();
+      toast("ok", "Uploaded", `${f.name} is in the embed. Save to keep it.`);
+    } catch (err) { toast("bad", "Not uploaded", err.message); }
+  };
+  paint();
+}
+const readBuilder = id => JSON.parse(JSON.stringify(B.get(id)));
+const builderHost = (id, msg, opts) => `<div>${builder(id, msg, opts)}</div>`;
+
+/* =====================================================================================
+   Entry points (index.html calls these)
+   ===================================================================================== */
 window.dashRoute = async parts => {
   const [gid, t] = parts;
   if (!gid) return showPicker();
   if (!G || G.guild.id !== gid) {
-    root().innerHTML = `<div class="loading-fox"><img class="mascot" src="${M("run")}" alt="" width="56" height="56"><span>Reading the server's channels and roles<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></span></div>`;
+    root().innerHTML = loading("Reading the server's channels and roles");
     try { G = await api(`/api/dash/guild/${gid}`); }
     catch (e) { G = null; return showProblem(e.message); }
-    editing = null; casePage = 0; caseUser = "";
+    casePage = 0; caseUser = "";
   }
-  tab = TABS.some(x => x.id === t) ? t : "welcome";
+  const next = TABS.some(x => x.id === t) ? t : "welcome";
+  if (next !== tab) editing = null;
+  tab = next;
   showGuild();
 };
 
 function showProblem(text) {
-  root().innerHTML = `<div class="empty"><div style="position:relative"><div class="fox-halo"></div><img class="mascot fox" src="${M("hurt")}" alt="" width="132" height="132"></div>
-    <h3>This server can't be opened</h3><p>${esc(text)}</p><div class="btnrow" style="justify-content:center"><a class="btn" href="#servers"><span class="p5-hl" aria-hidden="true"></span><span>All servers</span></a></div></div>`;
+  root().innerHTML = emptyState("hurt", "This server can't be opened", esc(text)) +
+    `<div class="btnrow" style="justify-content:center"><a class="btn" href="#servers"><span class="p5-hl" aria-hidden="true"></span><span>All servers</span></a></div>`;
 }
 
 async function showPicker() {
   G = null;
   $("#crumb-t").textContent = "Servers";
-  root().innerHTML = `<div class="loading-fox"><img class="mascot" src="${M("run")}" alt="" width="56" height="56"><span>Finding the servers you can manage<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></span></div>`;
+  root().innerHTML = loading("Finding the servers you can manage");
   let data;
   try { data = await api("/api/dash/guilds"); } catch (e) { return showProblem(e.message); }
-  const owner = window.ME && window.ME.kind === "owner";
+  const owner = window.ME && ME.kind === "owner";
   const head = `<header class="fleet-head page-intro"><div class="fh-words">
       <p class="eyebrow">Dashboard · <b>${data.guilds.length} server${data.guilds.length === 1 ? "" : "s"}</b></p>
       <h1 class="brush fh-title">Your servers</h1>
       <p class="lede">${owner ? "As the panel's owner you can open every server the bot is in." : "Servers where you have the Manage Server permission and the bot is a member."}</p>
     </div><img class="mascot fh-fox" src="${M("fox-pounce")}" alt="" width="92" height="92"></header>${intentsNote(data.intents)}`;
   if (!data.guilds.length) {
-    root().innerHTML = head + `<div class="empty"><div style="position:relative"><div class="fox-halo"></div><img class="mascot fox" src="${M("placeblock")}" alt="" width="132" height="132"></div>
-      <h3>No servers to manage yet</h3><p>${owner ? "The bot isn't in any server. Add it with the invite on the Overview." : "You need the Manage Server permission in a server the bot is in. Ask that server's owner to add the bot, or to give you the permission."}</p></div>`;
+    root().innerHTML = head + emptyState("placeblock", "No servers to manage yet", owner
+      ? "The bot isn't in any server. Add it with the invite on the Overview."
+      : "You need the Manage Server permission in a server the bot is in.");
     return;
   }
   root().innerHTML = head + `<div class="grid gauto bleed">${data.guilds.map(g => `
@@ -111,13 +240,13 @@ async function showPicker() {
       <header><h3>${esc(g.name)}</h3><span class="k">${g.members ?? "?"} members</span></header>
       <div style="display:flex;align-items:center;gap:14px">
         ${g.icon ? `<img src="${esc(g.icon)}" alt="" width="56" height="56" style="border-radius:50%;border:2.5px solid var(--slab-bg)">` : `<span class="seal dead" role="img" aria-label="No icon"><b>${esc(g.name.slice(0, 1))}</b></span>`}
-        <p class="card-sub" style="margin:0">Welcome messages, roles, moderation and logs.</p>
+        <p class="card-sub" style="margin:0">Welcome, roles, messages, tags, moderation and logs.</p>
       </div></a>`).join("")}</div>`;
 }
 
 function intentsNote(i) {
   if (!i || (i.members && i.message_content)) return "";
-  return `<div class="note bad" style="margin-bottom:18px"><b>Two Discord switches are off</b>Welcome messages, autorole, member logs and permission checks need <i>Server Members Intent</i>, and edit/delete logs need <i>Message Content Intent</i>. Turn both on in the Discord Developer Portal → your application → Bot → Privileged Gateway Intents, then restart the bot from the Overview.</div>`;
+  return `<div class="note bad" style="margin-bottom:18px"><b>Two Discord switches are off</b>Welcome messages, autorole, member logs and auto-replies need <i>Server Members Intent</i> and <i>Message Content Intent</i>. Turn both on in the Developer Portal → your application → Bot, then restart the bot from the Overview.</div>`;
 }
 
 function showGuild() {
@@ -125,6 +254,7 @@ function showGuild() {
   $("#crumb-t").textContent = g.name;
   const missing = G.missing.length ? `<div class="note warn" style="margin-bottom:18px"><b>The bot is missing ${G.missing.length === 1 ? "a permission" : "some permissions"}</b>${G.missing.map(m => `${esc(m.perm.replace(/_/g, " "))} (for ${esc(m.for)})`).join(" · ")}. Give its role these in Server Settings → Roles → ${esc(G.bot_role)}.</div>` : "";
   const groups = [...new Set(TABS.map(t => t.group))];
+  const count = {roles: G.menus.length, messages: G.posts.length, tags: G.tags.length, replies: G.config.autoresponders.items.length};
   root().innerHTML = `
     <header class="fleet-head page-intro"><div class="fh-words">
       <p class="eyebrow"><a href="#servers">All servers</a> · <b>${esc(g.id)}</b></p>
@@ -134,57 +264,50 @@ function showGuild() {
     ${intentsNote(G.intents)}${missing}
     <nav class="shelf" role="tablist" aria-label="Server settings" style="margin-bottom:24px"><span class="shelf-rope" aria-hidden="true"></span>
       ${groups.map(gr => `<div class="shelf-group"><span class="sg-label">${gr}</span>${TABS.filter(t => t.group === gr).map(t =>
-        `<button class="slipbtn" type="button" role="tab" aria-selected="${t.id === tab}" data-tab="${t.id}"><span class="sl-cord" aria-hidden="true"></span><span class="sl-kanji" aria-hidden="true">${t.kanji}</span><span class="sl-label">${t.label}</span>${t.id === "roles" && G.menus.length ? `<span class="n">${G.menus.length}</span>` : ""}</button>`).join("")}</div>`).join("")}
+        `<button class="slipbtn" type="button" role="tab" aria-selected="${t.id === tab}" data-tab="${t.id}"><span class="sl-cord" aria-hidden="true"></span><span class="sl-kanji" aria-hidden="true">${t.kanji}</span><span class="sl-label">${t.label}</span>${count[t.id] ? `<span class="n">${count[t.id]}</span>` : ""}</button>`).join("")}</div>`).join("")}
     </nav>
     <div id="tab-body"></div>`;
   root().querySelectorAll(".slipbtn").forEach(b => b.onclick = () => { location.hash = `#servers/${g.id}/${b.dataset.tab}`; });
-  ({welcome: tabWelcome, roles: tabRoles, moderation: tabModeration, logging: tabLogging})[tab]();
+  ({welcome: tabWelcome, roles: tabRoles, messages: tabMessages, tags: tabTags, replies: tabReplies,
+    starboard: tabStarboard, suggestions: tabSuggestions, moderation: tabModeration, logging: tabLogging})[tab]();
 }
-const body = () => $("#tab-body");
 
 /* ---------- Welcome ---------- */
-function placeholderHelp() {
-  return "Placeholders: " + Object.entries(G.placeholders).map(([k, v]) => `<code>${esc(k)}</code> ${esc(v)}`).join(" · ");
-}
 function tabWelcome() {
   const w = G.config.welcome, f = G.config.farewell, a = G.config.autorole;
-  body().innerHTML = `<div class="grid g2">
-    <div class="stack">
-      <section class="panel"><header><h3>Welcome message</h3><span class="sp">${w.enabled ? "On" : "Off"}</span></header><div class="pad">
-        <div class="switches" style="margin-bottom:16px">${sw("w-enabled", "Post a message when someone joins", w.enabled)}</div>
-        ${field("w-channel", "Channel", channelSelect("w-channel", w.channel_id))}
-        ${field("w-message", "Message", `<textarea id="w-message" rows="4" style="font-family:var(--body);font-size:15px">${esc(w.message)}</textarea>`, placeholderHelp())}
-        <div class="switches" style="margin-bottom:16px">${sw("w-embed", "Send it as an embed with their avatar", w.embed)}${sw("w-ping", "Mention them above the embed, so they get a ping", w.ping)}</div>
-        ${field("w-color", "Embed colour", `<input type="color" id="w-color" value="${esc(w.color)}" style="height:44px;padding:4px">`)}
-        <div class="switches" style="margin-bottom:12px">${sw("w-dm", "Also send them a direct message", w.dm_enabled)}</div>
-        ${field("w-dm-message", "Direct message", `<textarea id="w-dm-message" rows="3" style="font-family:var(--body);font-size:15px">${esc(w.dm_message)}</textarea>`, "Sent only if their DMs are open.")}
-        <div class="btnrow">${btn("w-save", "Save", "primary", "save")}${btn("w-test", "Send a test", "")}</div>
-      </div></section>
-    </div>
-    <div class="stack">
-      <section class="panel"><header><h3>Farewell message</h3><span class="sp">${f.enabled ? "On" : "Off"}</span></header><div class="pad">
-        <div class="switches" style="margin-bottom:16px">${sw("f-enabled", "Post a message when someone leaves", f.enabled)}</div>
-        ${field("f-channel", "Channel", channelSelect("f-channel", f.channel_id))}
-        ${field("f-message", "Message", `<textarea id="f-message" rows="3" style="font-family:var(--body);font-size:15px">${esc(f.message)}</textarea>`, "The same placeholders work here. {user} can't ping someone who left.")}
-        <div class="switches" style="margin-bottom:16px">${sw("f-embed", "Send it as an embed", f.embed)}</div>
-        ${field("f-color", "Embed colour", `<input type="color" id="f-color" value="${esc(f.color)}" style="height:44px;padding:4px">`)}
-        <div class="btnrow">${btn("f-save", "Save", "", "save")}${btn("f-test", "Send a test", "ghost")}</div>
+  body().innerHTML = `<div class="stack">
+    <section class="panel"><header><h3>Welcome message</h3><span class="sp">${w.enabled ? "On" : "Off"}</span></header><div class="pad">
+      <div class="b-row2">${field("w-channel", "Channel", channelSelect("w-channel", w.channel_id))}<div class="switches" style="align-content:center">${sw("w-enabled", "Post this when someone joins", w.enabled)}</div></div>
+      ${builderHost("welcome", JSON.parse(JSON.stringify(w.message)), {contentLabel: "Text above the embed", contentHelp: "<code>{user}</code> here pings the new member. Placeholders work in every field."})}
+      <div class="btnrow">${btn("w-save", "Save", "primary", "save")}${btn("w-test", "Send a test", "")}</div>
+      <p class="muted" style="font-size:12.5px;margin-top:10px">In Discord, <code>/greetings testgreet</code> posts it in the channel you're in.</p>
+    </div></section>
+    <div class="grid g2">
+      <section class="panel"><header><h3>Welcome DM</h3><span class="sp">${w.dm_enabled ? "On" : "Off"}</span></header><div class="pad">
+        <div class="switches" style="margin-bottom:12px">${sw("w-dm", "Also send new members a direct message", w.dm_enabled)}</div>
+        ${builderHost("dm", JSON.parse(JSON.stringify(w.dm)), {contentLabel: "Message"})}
+        <p class="help">Only reaches people whose DMs are open. Saved with the welcome message.</p>
       </div></section>
       <section class="panel"><header><h3>Autorole</h3><span class="sp">${a.enabled ? "On" : "Off"}</span></header><div class="pad">
-        <div class="switches" style="margin-bottom:16px">${sw("a-enabled", "Give roles to everyone who joins", a.enabled)}</div>
+        <div class="switches" style="margin-bottom:16px">${sw("a-enabled", "Give roles to everyone who joins", a.enabled)}${sw("a-restore", "Give people their roles back when they rejoin", a.restore_roles)}</div>
         <div class="field"><label>Roles for new members</label>${roleChips("a-roles", a.role_ids)}</div>
-        <div class="field"><label>Roles for new bots</label>${roleChips("a-bots", a.bot_role_ids)}<div class="help">Greyed-out roles are above the bot's own role (${esc(G.bot_role)}) or belong to an integration. If the server uses rules screening, roles are given once the member accepts the rules.</div></div>
+        <div class="field"><label>Roles for new bots</label>${roleChips("a-bots", a.bot_role_ids)}<div class="help">Greyed-out roles are above the bot's own role (${esc(G.bot_role)}) or belong to an integration.</div></div>
         <div class="btnrow">${btn("a-save", "Save", "", "save")}</div>
       </div></section>
-    </div></div>`;
+    </div>
+    <section class="panel"><header><h3>Farewell message</h3><span class="sp">${f.enabled ? "On" : "Off"}</span></header><div class="pad">
+      <div class="b-row2">${field("f-channel", "Channel", channelSelect("f-channel", f.channel_id))}<div class="switches" style="align-content:center">${sw("f-enabled", "Post this when someone leaves", f.enabled)}</div></div>
+      ${builderHost("farewell", JSON.parse(JSON.stringify(f.message)), {contentLabel: "Text above the embed"})}
+      <div class="btnrow">${btn("f-save", "Save", "", "save")}${btn("f-test", "Send a test", "ghost")}</div>
+    </div></section></div>`;
+  ["welcome", "dm", "farewell"].forEach(wireBuilder);
   wireChips();
-  $("#w-save").onclick = () => save("welcome", {enabled: on("w-enabled"), channel_id: val("w-channel") || null, message: val("w-message"),
-    embed: on("w-embed"), ping: on("w-ping"), color: val("w-color"), dm_enabled: on("w-dm"), dm_message: val("w-dm-message")},
-    "New members are greeted with this from now on.");
-  $("#f-save").onclick = () => save("farewell", {enabled: on("f-enabled"), channel_id: val("f-channel") || null, message: val("f-message"),
-    embed: on("f-embed"), color: val("f-color")}, "It posts when someone leaves.");
-  $("#a-save").onclick = () => save("autorole", {enabled: on("a-enabled"), role_ids: pickedRoles("a-roles"), bot_role_ids: pickedRoles("a-bots")},
-    "New members get these roles from now on.");
+  $("#w-save").onclick = () => saveSection("welcome", {enabled: on("w-enabled"), channel_id: val("w-channel") || null,
+    message: readBuilder("welcome"), dm_enabled: on("w-dm"), dm: readBuilder("dm")}, "New members are greeted with this from now on.");
+  $("#f-save").onclick = () => saveSection("farewell", {enabled: on("f-enabled"), channel_id: val("f-channel") || null,
+    message: readBuilder("farewell")}, "It posts when someone leaves.");
+  $("#a-save").onclick = () => saveSection("autorole", {enabled: on("a-enabled"), restore_roles: on("a-restore"),
+    role_ids: picked("a-roles"), bot_role_ids: picked("a-bots")}, "New members get these roles from now on.");
   $("#w-test").onclick = () => test("welcome");
   $("#f-test").onclick = () => test("farewell");
 }
@@ -199,13 +322,12 @@ async function test(section) {
 function tabRoles() {
   if (editing) return menuEditor();
   const ch = id => (G.channels.find(c => c.id === id) || {name: "deleted-channel"}).name;
-  body().innerHTML = `<div class="btnrow" style="margin-bottom:18px">${btn("rr-new", "New menu", "primary", "")}</div>` + (G.menus.length
+  body().innerHTML = `<div class="btnrow" style="margin-bottom:18px">${btn("rr-new", "New menu", "primary", "plus")}</div>` + (G.menus.length
     ? `<div class="grid gauto">${G.menus.map(m => `<div class="card"><header><h3>${esc(m.title)}</h3><span class="k">${KIND_WORD[m.kind]}</span></header>
         <p class="card-sub">#${esc(ch(m.channel_id))} · ${m.roles.length} role${m.roles.length === 1 ? "" : "s"} · ${esc(MODE_WORD[m.mode])}</p>
         ${m.message_id ? "" : `<div class="note warn" style="margin:8px 0"><b>Its message was deleted</b>Save it again to post it again.</div>`}
         <div class="btnrow">${btn("rr-edit-" + m.id, "Edit", "sm")}${btn("rr-del-" + m.id, "Delete", "sm ghost")}</div></div>`).join("")}</div>`
-    : `<div class="empty"><div style="position:relative"><div class="fox-halo"></div><img class="mascot fox" src="${M("placeblock")}" alt="" width="132" height="132"></div>
-        <h3>No role menus yet</h3><p>A menu is a message with buttons, a dropdown or reactions. Members click to give themselves roles: colours, pings, regions, game roles.</p></div>`);
+    : emptyState("placeblock", "No role menus yet", "A menu is a message with buttons, a dropdown or reactions. Members click to give themselves roles: colours, pings, regions, game roles."));
   $("#rr-new").onclick = () => { editing = {kind: "buttons", mode: "normal", title: "Pick your roles", description: "", color: "#f2879f", channel_id: "", roles: []}; menuEditor(); };
   for (const m of G.menus) {
     $("#rr-edit-" + m.id).onclick = () => { editing = JSON.parse(JSON.stringify(m)); menuEditor(); };
@@ -238,13 +360,13 @@ function menuEditor() {
     <div class="field"><label>Roles in the menu</label>
       ${m.roles.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Role</th><th>Emoji</th><th>Label</th>${m.kind === "dropdown" ? "<th>Description</th>" : ""}<th><span class="sr-only">Remove</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<p class="muted">No roles yet.</p>`}
-      <div class="help">Emoji: paste one like 🎮, or a custom one from this server: ${G.emojis.length ? G.emojis.slice(0, 12).map(e => `<button class="chip rr-emo" type="button" data-e="${esc(e.text)}" title=":${esc(e.name)}:"><img src="${esc(e.url)}" alt=":${esc(e.name)}:" width="16" height="16" style="vertical-align:-3px"></button>`).join(" ") : "this server has none"}.</div>
+      <div class="help">Emoji: paste one, or a custom one from this server: ${G.emojis.length ? G.emojis.slice(0, 12).map(e => `<button class="chip rr-emo" type="button" data-e="${esc(e.text)}" title=":${esc(e.name)}:"><img src="${esc(e.url)}" alt=":${esc(e.name)}:" width="16" height="16" style="vertical-align:-3px"></button>`).join(" ") : "this server has none"}.</div>
     </div>
-    <div class="btnrow">${btn("rr-add", "Add a role", "sm", "")}</div>
+    <div class="btnrow">${btn("rr-add", "Add a role", "sm", "plus")}</div>
     <hr>
     <div class="btnrow">${btn("rr-save", m.id ? "Save and update the message" : "Post the menu", "primary", "save")}${btn("rr-cancel", "Cancel", "ghost")}</div>
   </div></section>`;
-  const grab = () => {   // copy the form back into `editing`, so re-rendering keeps what was typed
+  const grab = () => {
     m.channel_id = val("rr-channel"); m.title = val("rr-title"); m.description = val("rr-desc"); m.color = val("rr-color");
     body().querySelectorAll("tbody tr").forEach(tr => {
       const r = m.roles[+tr.dataset.i];
@@ -269,14 +391,170 @@ function menuEditor() {
     grab();
     const b = $("#rr-save"); b.classList.add("busy"); b.disabled = true;
     try {
-      const path = `/api/dash/guild/${G.guild.id}/menus` + (m.id ? `/${m.id}` : "");
-      const r = await api(path, {method: m.id ? "PUT" : "POST", body: m});
+      const r = await api(`/api/dash/guild/${G.guild.id}/menus` + (m.id ? `/${m.id}` : ""), {method: m.id ? "PUT" : "POST", body: m});
       G.menus = G.menus.filter(x => x.id !== r.menu.id).concat([r.menu]).sort((a, b) => a.id - b.id);
       toast("ok", m.id ? "Menu updated" : "Menu posted", "It's live in Discord now.");
       editing = null;
       showGuild();
     } catch (e) { toast("bad", "Not posted", e.message); b.classList.remove("busy"); b.disabled = false; }
   };
+}
+
+/* ---------- Messages (embeds posted from here, editable later) ---------- */
+function tabMessages() {
+  if (editing) return postEditor();
+  const ch = id => (G.channels.find(c => c.id === id) || {name: "deleted-channel"}).name;
+  body().innerHTML = `<p class="lede" style="margin-bottom:16px">Write a message or an embed here and the bot posts it: rules, announcements, info panels. You can edit it later and the posted message changes too.</p>
+    <div class="btnrow" style="margin-bottom:18px">${btn("p-new", "New message", "primary", "plus")}</div>` + (G.posts.length
+    ? `<div class="grid gauto">${G.posts.map(p => `<div class="card"><header><h3>${esc(p.name)}</h3><span class="k">#${esc(ch(p.channel_id))}</span></header>
+        <p class="card-sub">${esc((p.message.embed.enabled ? p.message.embed.title || p.message.embed.description : p.message.content).slice(0, 90) || "Embed")}</p>
+        <div class="btnrow">${btn("p-edit-" + p.id, "Edit", "sm")}${btn("p-del-" + p.id, "Delete", "sm ghost")}</div></div>`).join("")}</div>`
+    : emptyState("placeblock", "Nothing posted from here yet", "Make a rules embed, an announcement or an info panel, with images or GIFs."));
+  $("#p-new").onclick = () => { editing = {name: "", channel_id: "", message: newMessage()}; editing.message.embed.enabled = true; postEditor(); };
+  for (const p of G.posts) {
+    $("#p-edit-" + p.id).onclick = () => { editing = JSON.parse(JSON.stringify(p)); postEditor(); };
+    $("#p-del-" + p.id).onclick = async () => {
+      if (!confirm(`Delete "${p.name}"? The message is removed from Discord too.`)) return;
+      try { await api(`/api/dash/guild/${G.guild.id}/posts/${p.id}`, {method: "DELETE"}); G.posts = G.posts.filter(x => x.id !== p.id); toast("ok", "Deleted", "The message is gone from Discord."); showGuild(); }
+      catch (e) { toast("bad", "Not deleted", e.message); }
+    };
+  }
+}
+function postEditor() {
+  const p = editing;
+  body().innerHTML = `<section class="panel"><header><h3>${p.id ? "Edit the message" : "New message"}</h3></header><div class="pad">
+    <div class="b-row2">${field("p-name", "Name (only shown here)", `<input id="p-name" value="${esc(p.name)}" maxlength="80" placeholder="Rules">`)}
+      ${field("p-channel", "Channel", channelSelect("p-channel", p.channel_id, "Pick a channel"), "Changing it moves the message: the old one is deleted.")}</div>
+    ${builderHost("post", p.message)}
+    <div class="btnrow">${btn("p-save", p.id ? "Save and update the message" : "Post it", "primary", "save")}${btn("p-cancel", "Cancel", "ghost")}</div>
+  </div></section>`;
+  wireBuilder("post");
+  $("#p-cancel").onclick = () => { editing = null; tabMessages(); };
+  $("#p-save").onclick = async () => {
+    const b = $("#p-save"); b.classList.add("busy"); b.disabled = true;
+    try {
+      const r = await api(`/api/dash/guild/${G.guild.id}/posts` + (p.id ? `/${p.id}` : ""), {method: p.id ? "PUT" : "POST",
+        body: {name: val("p-name"), channel_id: val("p-channel"), message: readBuilder("post")}});
+      G.posts = G.posts.filter(x => x.id !== r.post.id).concat([r.post]).sort((a, b) => a.id - b.id);
+      toast("ok", p.id ? "Updated" : "Posted", "It's in Discord now.");
+      editing = null;
+      showGuild();
+    } catch (e) { toast("bad", "Not posted", e.message); b.classList.remove("busy"); b.disabled = false; }
+  };
+}
+
+/* ---------- Tags ---------- */
+function tabTags() {
+  if (editing) return tagEditor();
+  body().innerHTML = `<p class="lede" style="margin-bottom:16px">A tag is a saved message anyone can post with <code>/tag show name</code>: rules, links, answers to questions people keep asking. People with Manage Messages can also make text tags in Discord with <code>/tag create</code>.</p>
+    <div class="btnrow" style="margin-bottom:18px">${btn("t-new", "New tag", "primary", "plus")}</div>` + (G.tags.length
+    ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Name</th><th>Posts</th><th class="num">Used</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${G.tags.map((t, i) => `
+        <tr><td class="mono">${esc(t.name)}</td><td>${esc((t.message.content || t.message.embed.title || t.message.embed.description || "Embed").slice(0, 70))}</td><td class="num">${t.uses}</td>
+        <td style="white-space:nowrap">${btn("t-edit-" + i, "Edit", "xs")} ${btn("t-del-" + i, "Delete", "xs ghost")}</td></tr>`).join("")}</tbody></table></div>`
+    : emptyState("placeblock", "No tags yet", "Make one for your rules, your invite link or a FAQ answer."));
+  $("#t-new").onclick = () => { editing = {name: "", message: newMessage()}; tagEditor(); };
+  G.tags.forEach((t, i) => {
+    $("#t-edit-" + i).onclick = () => { editing = {...JSON.parse(JSON.stringify(t)), old: t.name}; tagEditor(); };
+    $("#t-del-" + i).onclick = async () => {
+      if (!confirm(`Delete the tag "${t.name}"?`)) return;
+      try { await api(`/api/dash/guild/${G.guild.id}/tags/${encodeURIComponent(t.name)}`, {method: "DELETE"}); G.tags = G.tags.filter(x => x.name !== t.name); toast("ok", "Tag deleted", ""); showGuild(); }
+      catch (e) { toast("bad", "Not deleted", e.message); }
+    };
+  });
+}
+function tagEditor() {
+  const t = editing;
+  body().innerHTML = `<section class="panel"><header><h3>${t.old ? "Edit the tag" : "New tag"}</h3></header><div class="pad">
+    ${field("t-name", "Name", `<input id="t-name" value="${esc(t.name)}" maxlength="32" placeholder="rules">`, "1-32 letters, numbers, spaces, - or _. People type it after /tag show.")}
+    ${builderHost("tag", t.message)}
+    <div class="btnrow">${btn("t-save", "Save", "primary", "save")}${btn("t-cancel", "Cancel", "ghost")}</div>
+  </div></section>`;
+  wireBuilder("tag");
+  $("#t-cancel").onclick = () => { editing = null; tabTags(); };
+  $("#t-save").onclick = async () => {
+    try {
+      const r = await api(`/api/dash/guild/${G.guild.id}/tags` + (t.old ? `/${encodeURIComponent(t.old)}` : ""), {method: t.old ? "PUT" : "POST",
+        body: {name: val("t-name"), message: readBuilder("tag")}});
+      G.tags = G.tags.filter(x => x.name !== t.old && x.name !== r.tag.name).concat([r.tag]).sort((a, b) => a.name.localeCompare(b.name));
+      toast("ok", "Tag saved", `Post it with /tag show ${r.tag.name}.`);
+      editing = null;
+      showGuild();
+    } catch (e) { toast("bad", "Not saved", e.message); }
+  };
+}
+
+/* ---------- Auto-replies ---------- */
+function tabReplies() {
+  const cfg = G.config.autoresponders;
+  if (!editing) editing = {items: JSON.parse(JSON.stringify(cfg.items))};
+  const items = editing.items;
+  body().innerHTML = `<p class="lede" style="margin-bottom:16px">When a message contains a trigger, the bot answers with the reply you set. One reply per message, and at most one every 10 seconds per channel.</p>
+    <section class="panel"><header><h3>Auto-replies</h3><span class="sp">${items.length}/50</span></header><div class="pad">
+      <div class="switches" style="margin-bottom:16px">${sw("ar-enabled", "Answer triggers", cfg.enabled)}</div>
+      ${items.map((it, i) => `<details class="ar-item" ${it._open ? "open" : ""} data-i="${i}"><summary><b>${esc(it.trigger || "New auto-reply")}</b> <span class="muted">${esc(MATCH_WORD[it.match] || "")}</span></summary>
+        <div class="b-row2" style="margin-top:12px">${field(`ar-t-${i}`, "Trigger", `<input class="ar-trigger" id="ar-t-${i}" value="${esc(it.trigger)}" maxlength="200" placeholder="hello">`)}
+          ${field(`ar-m-${i}`, "Matches", `<select class="ar-match" id="ar-m-${i}">${Object.entries(MATCH_WORD).map(([k, v]) => `<option value="${k}" ${k === it.match ? "selected" : ""}>${v}</option>`).join("")}</select>`)}</div>
+        <div class="switches" style="margin-bottom:12px">${sw(`ar-r-${i}`, "Reply to the message (instead of just posting)", it.reply !== false)}</div>
+        ${builderHost("ar" + i, it.message, {contentLabel: "Reply"})}
+        <div class="btnrow">${btn(`ar-del-${i}`, "Remove this auto-reply", "sm ghost")}</div></details>`).join("")}
+      <div class="btnrow" style="margin-top:14px">${btn("ar-add", "Add an auto-reply", "", "plus")}${btn("ar-save", "Save", "primary", "save")}</div>
+    </div></section>`;
+  items.forEach((it, i) => wireBuilder("ar" + i));
+  const grab = () => items.forEach((it, i) => {
+    it.trigger = val(`ar-t-${i}`); it.match = val(`ar-m-${i}`); it.reply = on(`ar-r-${i}`); it.message = readBuilder("ar" + i);
+    it._open = $(`details[data-i="${i}"]`).open;
+  });
+  $("#ar-add").onclick = () => { grab(); items.push({trigger: "", match: "contains", reply: true, message: newMessage(), _open: true}); tabReplies(); };
+  items.forEach((it, i) => $(`#ar-del-${i}`).onclick = () => { grab(); items.splice(i, 1); tabReplies(); });
+  $("#ar-save").onclick = async () => {
+    grab();
+    const ok = await saveSection("autoresponders", {enabled: on("ar-enabled"), items: items.map(({_open, ...x}) => x)},
+      "The bot answers these triggers from now on.");
+    if (ok) { editing = null; showGuild(); }
+  };
+}
+
+/* ---------- Starboard ---------- */
+function tabStarboard() {
+  const s = G.config.starboard;
+  body().innerHTML = `<div class="grid g2">
+    <section class="panel"><header><h3>Starboard</h3><span class="sp">${s.enabled ? "On" : "Off"}</span></header><div class="pad">
+      <p>When a message gets enough star reactions, the bot reposts it in the starboard channel: a hall of fame for the best posts.</p>
+      <div class="switches" style="margin-bottom:16px">${sw("s-enabled", "Use a starboard", s.enabled)}${sw("s-self", "Count people starring their own message", s.self_star)}</div>
+      ${field("s-channel", "Starboard channel", channelSelect("s-channel", s.channel_id, "Pick a channel"))}
+      <div class="b-row2">${field("s-emoji", "Emoji", `<input id="s-emoji" value="${esc(s.emoji)}" maxlength="64">`, "A star by default; any emoji works.")}
+        ${field("s-threshold", "Stars needed", `<input type="number" id="s-threshold" min="1" max="100" value="${s.threshold}">`)}</div>
+      <div class="btnrow">${btn("s-save", "Save", "primary", "save")}</div>
+    </div></section>
+    <section class="panel"><header><h3>Channels left out</h3></header><div class="pad">
+      <div class="field"><label>Stars in these channels don't count</label>${channelChips("s-ignored", s.ignored_channel_ids)}</div>
+      <p class="help">Posts from age-restricted channels only go to an age-restricted starboard.</p>
+    </div></section></div>`;
+  wireChips();
+  $("#s-save").onclick = () => saveSection("starboard", {enabled: on("s-enabled"), self_star: on("s-self"), channel_id: val("s-channel") || null,
+    emoji: val("s-emoji"), threshold: +val("s-threshold"), ignored_channel_ids: picked("s-ignored")}, "Starred messages go to the starboard from now on.");
+}
+
+/* ---------- Suggestions ---------- */
+function tabSuggestions() {
+  const s = G.config.suggestions;
+  body().innerHTML = `<div class="grid g2">
+    <section class="panel"><header><h3>Suggestions</h3><span class="sp">${s.enabled ? "On" : "Off"}</span></header><div class="pad">
+      <p>Members post ideas with <code>/suggest</code>. The bot numbers them, posts them in the suggestions channel and adds vote reactions.</p>
+      <div class="switches" style="margin-bottom:16px">${sw("g-enabled", "Take suggestions", s.enabled)}${sw("g-anon", "Hide who made each suggestion", s.anonymous)}${sw("g-dm", "Tell people by DM when their suggestion is decided", s.dm_on_decision)}</div>
+      ${field("g-channel", "Suggestions channel", channelSelect("g-channel", s.channel_id, "Pick a channel"))}
+      <div class="btnrow">${btn("g-save", "Save", "primary", "save")}</div>
+    </div></section>
+    <section class="panel"><header><h3>Deciding</h3></header><div class="pad">
+      <div class="tablewrap"><table class="tbl"><tbody>
+        <tr><td class="mono">/suggestion approve</td><td>Approve it, with an optional reason</td></tr>
+        <tr><td class="mono">/suggestion deny</td><td>Turn it down</td></tr>
+        <tr><td class="mono">/suggestion consider</td><td>Mark it as being considered</td></tr>
+        <tr><td class="mono">/suggestion implemented</td><td>Mark it as done</td></tr></tbody></table></div>
+      <p class="help" style="margin-top:10px">These need the Manage Server permission. The suggestion's message changes colour and shows the decision.</p>
+    </div></section></div>`;
+  $("#g-save").onclick = () => saveSection("suggestions", {enabled: on("g-enabled"), anonymous: on("g-anon"), dm_on_decision: on("g-dm"),
+    channel_id: val("g-channel") || null}, "/suggest posts there from now on.");
 }
 
 /* ---------- Moderation ---------- */
@@ -294,11 +572,9 @@ function tabModeration() {
         <div class="switches" style="margin-bottom:16px">${sw("m-dm", "Tell people by DM why they were punished", md.dm_users)}</div>
         <div class="btnrow">${btn("m-save", "Save", "primary", "save")}</div>
       </div></section>
-      <section class="panel"><header><h3>Commands</h3></header><div class="pad"><div class="tablewrap"><table class="tbl"><tbody>${COMMANDS.map(([c, what, perm]) =>
-        `<tr><td class="mono" style="white-space:nowrap">${esc(c)}</td><td>${esc(what)}<br><span class="muted" style="font-size:12.5px">needs ${esc(perm)}</span></td></tr>`).join("")}</tbody></table></div>
-        <p class="muted" style="margin-top:10px;font-size:12.5px">Who sees these is set in Discord: Server Settings → Integrations → the bot.</p></div></section>
+      <section class="panel"><header><h3>Commands</h3></header><div class="pad"><p>Every moderation command, with what it needs, is on the <a href="#commands">Commands</a> page.</p></div></section>
     </aside></div>`;
-  $("#m-save").onclick = () => save("moderation", {modlog_channel_id: val("m-log") || null, dm_users: on("m-dm")}, "Moderation uses these from the next case on.");
+  $("#m-save").onclick = () => saveSection("moderation", {modlog_channel_id: val("m-log") || null, dm_users: on("m-dm")}, "Moderation uses these from the next case on.");
   let t;
   $("#case-user").oninput = e => { clearTimeout(t); t = setTimeout(() => { caseUser = e.target.value.replace(/\D/g, ""); casePage = 0; loadCases(); }, 350); };
   loadCases();
@@ -331,12 +607,62 @@ function tabLogging() {
     </div></section>
     <section class="panel"><header><h3>What to leave out</h3></header><div class="pad">
       <div class="switches" style="margin-bottom:16px">${sw("l-bots", "Leave out messages and voice moves by bots", l.ignore_bots)}</div>
-      <div class="field"><label>Channels whose messages aren't logged</label>
-        <div class="chiprow" data-roles="l-ignored">${G.channels.map(c => `<button class="chip" type="button" data-id="${c.id}" aria-pressed="${l.ignored_channel_ids.includes(c.id)}">#${esc(c.name)}</button>`).join("")}</div>
+      <div class="field"><label>Channels whose messages aren't logged</label>${channelChips("l-ignored", l.ignored_channel_ids)}
         <div class="help">The log channels themselves are always left out. Deleted messages can be quoted only if they were sent while the bot was running.</div></div>
     </div></section></div>`;
   wireChips();
-  $("#l-save").onclick = () => save("logging", {enabled: on("l-enabled"), ignore_bots: on("l-bots"), ignored_channel_ids: pickedRoles("l-ignored"),
+  $("#l-save").onclick = () => saveSection("logging", {enabled: on("l-enabled"), ignore_bots: on("l-bots"), ignored_channel_ids: picked("l-ignored"),
     channels: Object.fromEntries(LOGS.map(([k]) => [k, val("l-" + k) || null]))}, "Events are logged where you picked.");
 }
+
+/* =====================================================================================
+   The Commands guide (its own screen in the rail)
+   ===================================================================================== */
+const GUIDE = [
+  {area: "Music", kanji: "音", how: "Join a voice channel and use /play with a YouTube or Spotify link, a playlist, or search words. The bot joins your channel. Only people in the bot's channel can control it.", cmds: [
+    ["/play", "Play a song or playlist: a YouTube or Spotify link, or search words", "everyone"],
+    ["/playnext", "Put a song at the front of the queue", "everyone"],
+    ["/skip · /skipto", "Skip the song, or jump to a place in the queue", "everyone"],
+    ["/pause · /resume · /stop", "Pause, carry on, or stop and leave", "everyone"],
+    ["/queue · /nowplaying", "See the queue, or the song playing", "everyone"],
+    ["/volume · /loop · /shuffle", "Volume 0-200%, loop the song or queue, shuffle", "everyone"],
+    ["/remove · /move · /clear · /seek", "Edit the queue, or jump inside the song", "everyone"]]},
+  {area: "Greetings", kanji: "迎", how: "Set the welcome and farewell messages on Servers → Welcome, with the embed builder. Autorole gives roles to new members, and can give people their roles back when they rejoin.", cmds: [
+    ["/greetings testgreet", "Post the welcome message here, as if someone just joined", "Manage Server"],
+    ["/greetings testfarewell", "Post the farewell message here", "Manage Server"],
+    ["/greetings testdm", "Send yourself the welcome DM", "Manage Server"],
+    ["/greetings status", "What's on: welcome, farewell, DM, autorole", "Manage Server"]]},
+  {area: "Moderation", kanji: "守", how: "Every action becomes a numbered case. Set a mod-log channel on Servers → Moderation to get an entry for each. The bot won't act on someone whose role is at or above yours or its own.", cmds: [
+    ["/ban", "Ban someone. Add a duration (1d, 2w) for a temporary ban, lifted by itself", "Ban Members"],
+    ["/unban", "Lift a ban, by user ID", "Ban Members"],
+    ["/kick", "Kick someone out", "Kick Members"],
+    ["/timeout · /untimeout", "Mute someone for up to 28 days, or end it early", "Timeout Members"],
+    ["/warn · /warnings", "Warn someone, or see someone's history", "Timeout Members"],
+    ["/case · /reason", "Look up a case, change its reason", "Timeout Members"],
+    ["/purge", "Delete up to 500 recent messages, optionally from one person", "Manage Messages"]]},
+  {area: "Tags", kanji: "札", how: "Saved messages anyone can post by name. Make text tags in Discord, or tags with embeds and images on Servers → Tags.", cmds: [
+    ["/tag show", "Post a tag (type to search the names)", "everyone"],
+    ["/tag list · /tag info", "Every tag, or who made one and how often it's used", "everyone"],
+    ["/tag create · edit · delete", "Make, change or delete a text tag", "Manage Messages"]]},
+  {area: "Community", kanji: "案", how: "Suggestions and the starboard are switched on per server on the dashboard. Auto-replies answer trigger words with a message you build.", cmds: [
+    ["/suggest", "Suggest something; it's posted with vote reactions", "everyone"],
+    ["/suggestion approve · deny · consider · implemented", "Decide on a suggestion", "Manage Server"]]},
+  {area: "Reminders and info", kanji: "暦", how: "Reminders arrive in the channel you set them in, or by DM if that channel is gone.", cmds: [
+    ["/remind", "A reminder later, e.g. in 2h", "everyone"],
+    ["/reminders list · delete", "Your reminders", "everyone"],
+    ["/userinfo · /serverinfo · /avatar", "Facts about someone or this server, a full-size avatar", "everyone"],
+    ["/say", "Have the bot post a message", "Manage Messages"]]},
+];
+window.showGuide = () => {
+  $("#crumb-t").textContent = "Commands";
+  $("#guide-root").innerHTML = `<header class="fleet-head page-intro"><div class="fh-words">
+      <p class="eyebrow">Guide · <b>${GUIDE.reduce((n, g) => n + g.cmds.length, 0)} entries</b></p>
+      <h1 class="brush fh-title">Commands</h1>
+      <p class="lede">Everything the bot does, by area. Type / in Discord to see them there too. Who can use each one is listed beside it; server admins can change that in Server Settings → Integrations → the bot.</p>
+    </div><img class="mascot fh-fox" src="${M("nod")}" alt="" width="92" height="92"></header>
+    <div class="stack">${GUIDE.map(g => `<section class="panel"><header><h3>${g.area}</h3><span class="sp">${g.cmds.length}</span></header><div class="pad">
+      <p>${esc(g.how)}</p><div class="tablewrap"><table class="tbl"><thead><tr><th>Command</th><th>What it does</th><th>Who can use it</th></tr></thead><tbody>
+      ${g.cmds.map(([c, w, who]) => `<tr><td class="mono" style="white-space:nowrap">${esc(c)}</td><td>${esc(w)}</td><td>${who === "everyone" ? '<span class="pill ok">Everyone</span>' : `<span class="pill ghost">${esc(who)}</span>`}</td></tr>`).join("")}
+      </tbody></table></div></div></section>`).join("")}</div>`;
+};
 })();

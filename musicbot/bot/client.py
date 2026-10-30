@@ -8,6 +8,7 @@ from discord.ext import commands
 from .. import settings
 from . import api
 from .commands import Music
+from .community import Community
 from .db import Database
 from .eventlog import EventLog
 from .guildconfig import GuildConfigs
@@ -15,6 +16,8 @@ from .moderation import Moderation
 from .player import GuildPlayer
 from .roles import ReactionRoles
 from .spotify import Spotify
+from .tags import Tags
+from .utility import Utility
 from .welcome import Welcome
 
 log = logging.getLogger("musicbot")
@@ -53,7 +56,7 @@ class MusicBot(commands.Bot):
     async def setup_hook(self) -> None:
         self.db = await Database.open()
         self.configs = GuildConfigs(self.db)
-        for cog in (Music, Welcome, ReactionRoles, Moderation, EventLog):
+        for cog in (Music, Welcome, ReactionRoles, Moderation, EventLog, Tags, Community, Utility):
             await self.add_cog(cog(self))
         self.api = await api.start(self)
         synced = await self.tree.sync()

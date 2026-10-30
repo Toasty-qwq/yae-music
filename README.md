@@ -101,17 +101,33 @@ channel (change this in Settings).
 Forgot the panel password? Set `PANEL_PASSWORD` in `docker-compose.yml` (or as an environment
 variable before `start.bat`). While it is set, it replaces the saved password.
 
-## Server features: welcome, roles, moderation, logs
+## Server features (like Carl-bot)
 
 Besides music, the bot does what Carl-bot does for a server. Every setting is per server, on the
 panel's **Servers** page:
 
 | Tab | What it does |
 |---|---|
-| Welcome | Welcome and farewell messages (text or embed, with `{user}`, `{server}`, `{membercount}` and more), an optional welcome DM, and **autorole** (roles every new member or bot gets) |
+| Welcome | Welcome and farewell messages and a welcome DM, built with the **embed builder**. **Autorole** gives new members and bots roles, and can give people their roles back when they rejoin. Test with `/greetings testgreet` |
 | Roles | **Reaction-role menus**: a message with buttons, a dropdown, or emoji reactions that members click to give themselves roles. Modes: toggle, one-at-a-time, or get-only |
+| Messages | Post your own messages and embeds (rules, announcements, info panels) and edit them later |
+| Tags | Saved messages anyone posts with `/tag show <name>` |
+| Auto-replies | When a message contains a trigger word, the bot answers with a message you build |
+| Starboard | Messages with enough star reactions get reposted in a hall-of-fame channel |
+| Suggestions | `/suggest` posts numbered ideas with vote reactions; `/suggestion approve/deny/consider/implemented` decides them |
 | Moderation | `/ban` (also temporary: `1d`, `2w`), `/unban`, `/kick`, `/timeout`, `/untimeout`, `/warn`, `/warnings`, `/case`, `/reason`, `/purge`. Every action is a numbered case, listed on the dashboard and posted to a mod-log channel |
 | Logging | Deleted and edited messages, joins and leaves, nickname and role changes, bans, kicks and timeouts (also ones done by hand), voice joins and moves, channel and role changes, each to its own channel |
+
+Also for everyone: `/remind`, `/reminders`, `/userinfo`, `/serverinfo`, `/avatar`, and `/say` for
+moderators. The panel's **Commands** page lists every command with what it does and who can use it.
+
+**The embed builder** has every part of a Discord embed: text above it, author (icon, name, link),
+title and title link, description, up to 25 fields (side by side or not), a big image, a
+thumbnail, footer and footer icon, the time, and the colour, with a live preview. Image fields take
+a link (GIFs from a direct `.gif` link work), a placeholder like `{user.avatar}` or `{server.icon}`, or
+a picture or GIF up to 8 MB uploaded with the button next to the field. Placeholders work in Carl-bot's
+style too: `{user}`, `{mention}`, `{user.name}` or `{user(name)}`, `{user.avatar}` or `{user(icon)}`,
+`{server}`, `{server.icon}`, `{membercount}`, `{channel}`.
 
 **One-time setup in the Discord Developer Portal** (<https://discord.com/developers/applications> → your bot):
 

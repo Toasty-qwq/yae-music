@@ -4,14 +4,19 @@ person's Discord user id (``uid``), or ``owner`` for the panel owner, and the bo
 that that person really has Manage Server in the server, on every request."""
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import logging
+import time
 from typing import TYPE_CHECKING
 
 import discord
 from aiohttp import web
 
-from .guildconfig import ConfigError, role_problem
-from .templates import PLACEHOLDERS
+from . import messages
+from .guildconfig import ConfigError, _channel, role_problem
+from .templates import PLACEHOLDERS, Ctx
 
 if TYPE_CHECKING:
     from .client import MusicBot
@@ -92,6 +97,8 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
             "bot_role": me.top_role.name, "missing": missing, "intents": intents(),
             "config": {k: _ids_to_str(v) for k, v in cfg.items()},
             "menus": [_ids_to_str(m) for m in await bot.db.menus(g.id)],
+            "tags": [_ids_to_str(t) for t in await bot.get_cog("Tags").listing(g.id)],
+            "posts": [_ids_to_str(_post(p)) for p in await bot.db.all("SELECT * FROM posts WHERE guild_id=? ORDER BY id", (g.id,))],
             "placeholders": PLACEHOLDERS,
         })
 
@@ -145,6 +152,101 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
             return web.json_response({"ok": False, "error": problem}, status=400)
         return web.json_response({"ok": True})
 
+    async def save_tag(request: web.Request):
+        g = await guild_or_403(request)
+        body = await request.json()
+        old = request.match_info.get("name")
+        uid = request.query.get("uid", "")
+        try:
+            tag = await bot.get_cog("Tags").save(g.id, body.get("name", ""), body.get("message"),
+                                                 int(uid) if uid.isdigit() else g.me.id, old_name=old)
+        except ConfigError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return web.json_response({"ok": True, "tag": _ids_to_str(tag)})
+
+    async def delete_tag(request: web.Request):
+        g = await guild_or_403(request)
+        await bot.get_cog("Tags").delete(g.id, request.match_info["name"])
+        return web.json_response({"ok": True})
+
+    async def save_post(request: web.Request):
+        """Post (or edit) a message from the dashboard's Messages tab."""
+        g = await guild_or_403(request)
+        body = await request.json()
+        pid = request.match_info.get("pid")
+        try:
+            channel_id = _channel(g, body.get("channel_id"), "the message", required=True)
+            msg = messages.validate(body.get("message"), "The message")
+        except ConfigError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        name = str(body.get("name") or "").strip()[:80] or "Message"
+        who = await member_of(g, request.query.get("uid", "")) or g.me
+        ch = g.get_channel(channel_id)
+        ctx = Ctx(g, who, ch)
+        old = await bot.db.one("SELECT * FROM posts WHERE id=? AND guild_id=?", (int(pid), g.id)) if pid else None
+        if pid and not old:
+            return web.json_response({"ok": False, "error": "That message isn't on the list any more."}, status=404)
+        try:
+            sent = None
+            if old and old["channel_id"] == channel_id and old.get("message_id"):
+                try:
+                    sent = await messages.edit(await ch.fetch_message(old["message_id"]), msg, ctx)
+                except discord.NotFound:
+                    sent = None
+            elif old and old.get("message_id"):
+                old_ch = g.get_channel(old["channel_id"])
+                if old_ch:
+                    try:
+                        await old_ch.get_partial_message(old["message_id"]).delete()
+                    except discord.HTTPException:
+                        pass
+            if sent is None:
+                sent = await messages.send(ch, msg, ctx)
+        except discord.HTTPException as e:
+            return web.json_response({"ok": False, "error": f"Discord refused the message: {e.text or e}"}, status=400)
+        if old:
+            await bot.db.run("UPDATE posts SET channel_id=?, message_id=?, name=?, message=? WHERE id=?",
+                             (channel_id, sent.id, name, json.dumps(msg), old["id"]))
+            post_id = old["id"]
+        else:
+            post_id = await bot.db.run("INSERT INTO posts(guild_id, channel_id, message_id, name, message, created_at) "
+                                       "VALUES(?,?,?,?,?,?)", (g.id, channel_id, sent.id, name, json.dumps(msg), time.time()))
+        row = await bot.db.one("SELECT * FROM posts WHERE id=?", (post_id,))
+        log.info("guild %s: dashboard message %r posted in #%s", g.id, name, ch)
+        return web.json_response({"ok": True, "post": _ids_to_str(_post(row)), "jump": sent.jump_url})
+
+    async def delete_post(request: web.Request):
+        g = await guild_or_403(request)
+        row = await bot.db.one("SELECT * FROM posts WHERE id=? AND guild_id=?", (int(request.match_info["pid"]), g.id))
+        if row:
+            ch = g.get_channel(row["channel_id"])
+            if ch and row.get("message_id"):
+                try:
+                    await ch.get_partial_message(row["message_id"]).delete()
+                except discord.HTTPException:
+                    pass
+            await bot.db.run("DELETE FROM posts WHERE id=?", (row["id"],))
+        return web.json_response({"ok": True})
+
+    async def upload(request: web.Request):
+        g = await guild_or_403(request)
+        body = await request.json()
+        try:
+            data = base64.b64decode(body.get("data", ""), validate=True)
+            token = messages.save_media(g.id, str(body.get("filename") or "image.png"), data)
+        except (binascii.Error, ValueError) as e:
+            msg = str(e) if isinstance(e, ConfigError) else "That file didn't arrive in one piece. Try again."
+            return web.json_response({"ok": False, "error": msg}, status=400)
+        log.info("guild %s: uploaded %s (%d KB)", g.id, token, len(data) // 1024)
+        return web.json_response({"ok": True, "token": token})
+
+    async def media(request: web.Request):
+        g = await guild_or_403(request)
+        path = messages.media_path(g.id, request.match_info["name"])
+        if not path:
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400"})
+
     return [
         web.get("/dash/guilds", guilds),
         web.get("/dash/guild/{gid}", guild_detail),
@@ -154,7 +256,19 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
         web.delete("/dash/guild/{gid}/menus/{mid}", delete_menu),
         web.get("/dash/guild/{gid}/cases", cases),
         web.post("/dash/guild/{gid}/test", test),
+        web.post("/dash/guild/{gid}/tags", save_tag),
+        web.put("/dash/guild/{gid}/tags/{name}", save_tag),
+        web.delete("/dash/guild/{gid}/tags/{name}", delete_tag),
+        web.post("/dash/guild/{gid}/posts", save_post),
+        web.put("/dash/guild/{gid}/posts/{pid}", save_post),
+        web.delete("/dash/guild/{gid}/posts/{pid}", delete_post),
+        web.post("/dash/guild/{gid}/media", upload),
+        web.get("/dash/guild/{gid}/media/{name}", media),
     ]
+
+
+def _post(row: dict) -> dict:
+    return {**row, "message": json.loads(row["message"])}
 
 
 def _ids_to_str(value):

@@ -297,13 +297,20 @@ class Music(commands.Cog):
 
     @app_commands.command(description="Show the music commands")
     async def help(self, interaction: discord.Interaction):
-        e = discord.Embed(title="Commands", color=ui.COLOR)
-        for cog_name, title in (("Music", "Music"), ("Moderation", "Moderation (needs the matching permission)")):
+        e = discord.Embed(title="Commands", color=ui.COLOR,
+                          description="Every command, by area. The dashboard's Commands page explains each one.")
+        areas = (("Music", "Music"), ("Welcome", "Greetings"), ("Moderation", "Moderation"), ("Tags", "Tags"),
+                 ("Community", "Suggestions"), ("Utility", "Reminders and info"))
+        for cog_name, title in areas:
             cog = self.bot.get_cog(cog_name)
-            if cog:
-                lines = [f"**/{c.name}** {c.description}" for c in cog.get_app_commands()]
-                e.add_field(name=title, value="\n".join(lines)[:1024], inline=False)
-        e.set_footer(text="Welcome messages, role menus and logs are set up on the bot's dashboard.")
+            if not cog:
+                continue
+            names = []
+            for c in cog.get_app_commands():
+                subs = getattr(c, "commands", None)
+                names += [f"`/{c.name} {s.name}`" for s in subs] if subs else [f"`/{c.name}`"]
+            e.add_field(name=title, value=" ".join(names)[:1024], inline=False)
+        e.set_footer(text="Welcome messages, role menus, logs and more are set up on the bot's dashboard.")
         await interaction.response.send_message(embed=e, ephemeral=True)
 
     # ---- leaving when idle / alone -------------------------------------------------------------

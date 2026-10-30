@@ -3,27 +3,33 @@ sends (every channel and role is checked against the real server before it is sa
 from __future__ import annotations
 
 import copy
-import re
 from typing import TYPE_CHECKING
 
 import discord
+
+from . import messages
+from .errors import HEX, ConfigError  # noqa: F401  (re-exported)
 
 if TYPE_CHECKING:
     from .db import Database
 
 LOG_CATEGORIES = ("messages", "members", "moderation", "voice", "server")
 
+WELCOME_DEFAULT = messages.message(
+    "{user}", color="#f2879f", title="Welcome to {server}!",
+    description="Glad you're here, {user.display}. You're member number {membercount}.",
+    thumbnail="{user.avatar}", footer="{server}", footer_icon="{server.icon}", timestamp=True)
+FAREWELL_DEFAULT = messages.message(
+    "", color="#7c687a", description="**{user.name}** left. {server} has {membercount} members now.",
+    thumbnail="{user.avatar}")
+DM_DEFAULT = messages.message("Welcome to {server}, {user.name}. Glad you're here.")
+MATCHES = ("contains", "word", "exact", "starts")
+
 DEFAULTS: dict = {
-    "welcome": {
-        "enabled": False, "channel_id": None, "embed": True, "ping": True, "color": "#f2879f",
-        "message": "Welcome to **{server}**, {user}! You are member number {membercount}.",
-        "dm_enabled": False, "dm_message": "Welcome to {server}, {user.name}. Glad you're here.",
-    },
-    "farewell": {
-        "enabled": False, "channel_id": None, "embed": True, "color": "#7c687a",
-        "message": "**{user.name}** left. {server} has {membercount} members now.",
-    },
-    "autorole": {"enabled": False, "role_ids": [], "bot_role_ids": []},
+    "welcome": {"enabled": False, "channel_id": None, "message": WELCOME_DEFAULT,
+                "dm_enabled": False, "dm": DM_DEFAULT},
+    "farewell": {"enabled": False, "channel_id": None, "message": FAREWELL_DEFAULT},
+    "autorole": {"enabled": False, "role_ids": [], "bot_role_ids": [], "restore_roles": False},
     "moderation": {"modlog_channel_id": None, "dm_users": True},
     "logging": {
         "enabled": False,
@@ -31,13 +37,30 @@ DEFAULTS: dict = {
         "ignored_channel_ids": [],
         "ignore_bots": True,
     },
+    "autoresponders": {"enabled": False, "items": []},
+    "starboard": {"enabled": False, "channel_id": None, "emoji": "\u2b50", "threshold": 3,
+                  "self_star": False, "ignored_channel_ids": []},
+    "suggestions": {"enabled": False, "channel_id": None, "anonymous": False, "dm_on_decision": True},
 }
 SECTIONS = tuple(DEFAULTS)
-HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+MESSAGE_KEYS = {"message", "dm"}  # whole message dicts: replaced, never merged key by key
 
 
-class ConfigError(ValueError):
-    """A message the dashboard shows next to the field."""
+def _legacy(section: str, v: dict) -> dict:
+    """Welcome/farewell saved before the embed builder kept flat text settings."""
+    if section not in ("welcome", "farewell") or not isinstance(v.get("message"), str):
+        return v
+    v = dict(v)
+    text = v.pop("message")
+    if v.pop("embed", True):
+        mention = "{user}" if v.pop("ping", section == "welcome") else ""
+        v["message"] = messages.message(mention, color=v.pop("color", "#f2879f"), description=text,
+                                        thumbnail="{user.avatar}")
+    else:
+        v["message"] = messages.message(text)
+    if "dm_message" in v:
+        v["dm"] = messages.message(v.pop("dm_message"))
+    return v
 
 
 def merged(stored: dict) -> dict:
@@ -45,12 +68,16 @@ def merged(stored: dict) -> dict:
     out = copy.deepcopy(DEFAULTS)
     for section, values in (stored or {}).items():
         if section in out and isinstance(values, dict):
+            values = _legacy(section, values)
             for k, v in values.items():
-                if k in out[section]:
-                    if isinstance(out[section][k], dict) and isinstance(v, dict):
-                        out[section][k].update({kk: vv for kk, vv in v.items() if kk in out[section][k]})
-                    else:
-                        out[section][k] = v
+                if k not in out[section]:
+                    continue
+                if k in MESSAGE_KEYS:
+                    out[section][k] = messages.upgrade(v)
+                elif isinstance(out[section][k], dict) and isinstance(v, dict):
+                    out[section][k].update({kk: vv for kk, vv in v.items() if kk in out[section][k]})
+                else:
+                    out[section][k] = v
     return out
 
 
@@ -148,15 +175,13 @@ def role_problem(guild: discord.Guild, role: discord.Role) -> str | None:
 
 def _welcome(guild, d):
     enabled = _bool(d, "enabled", False)
+    dm_enabled = _bool(d, "dm_enabled", False)
     return {
         "enabled": enabled,
         "channel_id": _channel(guild, d.get("channel_id"), "the welcome message", required=enabled),
-        "embed": _bool(d, "embed", True),
-        "ping": _bool(d, "ping", True),
-        "color": _color(d, "color", DEFAULTS["welcome"]["color"]),
-        "message": _text(d, "message", "", 2000, "The welcome message") or DEFAULTS["welcome"]["message"],
-        "dm_enabled": _bool(d, "dm_enabled", False),
-        "dm_message": _text(d, "dm_message", "", 2000, "The welcome DM") or DEFAULTS["welcome"]["dm_message"],
+        "message": messages.validate(d.get("message"), "The welcome message"),
+        "dm_enabled": dm_enabled,
+        "dm": messages.validate(d.get("dm"), "The welcome DM") if dm_enabled or d.get("dm") else DM_DEFAULT,
     }
 
 
@@ -165,9 +190,7 @@ def _farewell(guild, d):
     return {
         "enabled": enabled,
         "channel_id": _channel(guild, d.get("channel_id"), "the farewell message", required=enabled),
-        "embed": _bool(d, "embed", True),
-        "color": _color(d, "color", DEFAULTS["farewell"]["color"]),
-        "message": _text(d, "message", "", 2000, "The farewell message") or DEFAULTS["farewell"]["message"],
+        "message": messages.validate(d.get("message"), "The farewell message"),
     }
 
 
@@ -176,6 +199,62 @@ def _autorole(guild, d):
         "enabled": _bool(d, "enabled", False),
         "role_ids": _roles(guild, d.get("role_ids"), "Roles for new members"),
         "bot_role_ids": _roles(guild, d.get("bot_role_ids"), "Roles for new bots"),
+        "restore_roles": _bool(d, "restore_roles", False),
+    }
+
+
+def _channels(guild, values) -> list[int]:
+    out = []
+    for v in values or []:
+        try:
+            if guild.get_channel(int(v)):
+                out.append(int(v))
+        except (TypeError, ValueError):
+            pass
+    return list(dict.fromkeys(out))
+
+
+def _autoresponders(guild, d):
+    items = []
+    for i, it in enumerate(d.get("items") or [], start=1):
+        trigger = str(it.get("trigger") or "").strip()
+        if not trigger:
+            raise ConfigError(f"Auto-reply {i} needs a trigger: the words that set it off.")
+        if len(trigger) > 200:
+            raise ConfigError(f"Auto-reply {i}: keep the trigger under 200 characters.")
+        match = it.get("match") if it.get("match") in MATCHES else "contains"
+        items.append({"trigger": trigger, "match": match, "reply": bool(it.get("reply", True)),
+                      "message": messages.validate(it.get("message"), f"Auto-reply {i} ({trigger})")})
+    if len(items) > 50:
+        raise ConfigError("A server can have up to 50 auto-replies.")
+    return {"enabled": _bool(d, "enabled", False), "items": items}
+
+
+def _starboard(guild, d):
+    enabled = _bool(d, "enabled", False)
+    emoji = str(d.get("emoji") or "\u2b50").strip()[:64]
+    try:
+        threshold = int(d.get("threshold") or 3)
+    except (TypeError, ValueError):
+        threshold = 3
+    if not 1 <= threshold <= 100:
+        raise ConfigError("The number of stars needed must be between 1 and 100.")
+    return {
+        "enabled": enabled,
+        "channel_id": _channel(guild, d.get("channel_id"), "the starboard", required=enabled),
+        "emoji": emoji, "threshold": threshold,
+        "self_star": _bool(d, "self_star", False),
+        "ignored_channel_ids": _channels(guild, d.get("ignored_channel_ids")),
+    }
+
+
+def _suggestions(guild, d):
+    enabled = _bool(d, "enabled", False)
+    return {
+        "enabled": enabled,
+        "channel_id": _channel(guild, d.get("channel_id"), "suggestions", required=enabled),
+        "anonymous": _bool(d, "anonymous", False),
+        "dm_on_decision": _bool(d, "dm_on_decision", True),
     }
 
 
@@ -188,20 +267,15 @@ def _moderation(guild, d):
 
 def _logging(guild, d):
     chans = d.get("channels") or {}
-    ignored = []
-    for v in d.get("ignored_channel_ids") or []:
-        try:
-            if guild.get_channel(int(v)):
-                ignored.append(int(v))
-        except (TypeError, ValueError):
-            pass
+    ignored = _channels(guild, d.get("ignored_channel_ids"))
     return {
         "enabled": _bool(d, "enabled", False),
         "channels": {c: _channel(guild, chans.get(c), f"{c} logs", required=False) for c in LOG_CATEGORIES},
-        "ignored_channel_ids": list(dict.fromkeys(ignored)),
+        "ignored_channel_ids": ignored,
         "ignore_bots": _bool(d, "ignore_bots", True),
     }
 
 
 VALIDATORS = {"welcome": _welcome, "farewell": _farewell, "autorole": _autorole,
-              "moderation": _moderation, "logging": _logging}
+              "moderation": _moderation, "logging": _logging, "autoresponders": _autoresponders,
+              "starboard": _starboard, "suggestions": _suggestions}

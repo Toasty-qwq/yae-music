@@ -60,6 +60,7 @@
       <div class="sec">The bot</div>
       <a class="navlink" href="#overview" data-tab="overview" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/></svg><span>Overview</span></a>
       <a class="navlink" href="#servers" data-tab="servers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 19v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V19M9.5 9.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM21 19v-1.5a4 4 0 0 0-3-3.9M16 3.6a4 4 0 0 1 0 7.8"/></svg><span>Servers</span></a>
+      <a class="navlink" href="#commands" data-tab="commands"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14v14H5zM8.5 9.5l2.5 2.5-2.5 2.5M13 15h3"/></svg><span>Commands</span></a>
       <a class="navlink" href="#logs" data-tab="logs" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h3"/></svg><span>Logs</span><span class="count alarm" id="err-count" hidden></span></a>
       <a class="navlink" href="#settings" data-tab="settings" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4"/></svg><span>Settings</span></a>
       <a class="navlink" href="#upkeep" data-tab="upkeep" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 4.5a4.5 4.5 0 0 0-5.9 5.9L4 16v4h4l5.6-5.6a4.5 4.5 0 0 0 5.9-5.9L17 11l-3-3z"/></svg><span>Upkeep</span></a>
@@ -149,6 +150,11 @@
         <!-- ============ Servers (the dashboard; filled by dashboard.js) ============ -->
         <section class="screen" id="screen-servers" aria-label="Servers" hidden>
           <div id="dash-root"></div>
+        </section>
+
+        <!-- ============ Commands guide (dashboard.js) ============ -->
+        <section class="screen" id="screen-commands" aria-label="Commands" hidden>
+          <div id="guide-root"></div>
         </section>
 
         <!-- ============ Logs ============ -->
@@ -327,6 +333,7 @@ const ICON = {
   log: "M6 3h12v18H6zM9 7h6M9 11h6M9 15h3",
   save: "M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6",
   plus: "M12 5v14M5 12h14",
+  upload: "M12 21V9M7 13l5-5 5 5M4 4h16",
 };
 const svg = (name, size = 13) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${ICON[name]}"/></svg>`;
 
@@ -435,13 +442,14 @@ $("#gate-form").onsubmit = async ev => {
 };
 
 /* ---------- screens ---------- */
-const SCREENS = {overview: "Overview", servers: "Servers", logs: "Logs", settings: "Settings", upkeep: "Upkeep"};
+const SCREENS = {overview: "Overview", servers: "Servers", commands: "Commands", logs: "Logs", settings: "Settings", upkeep: "Upkeep"};
+const PUBLIC_SCREENS = ["servers", "commands"];  // what a Discord sign-in can open
 let screen = "overview";
 window.ME = {kind: null, user: null};
 function route() {
   const [want, ...rest] = location.hash.slice(1).split("/");
   const owner = ME.kind === "owner";
-  screen = SCREENS[want] && (owner || want === "servers") ? want : owner ? "overview" : "servers";
+  screen = SCREENS[want] && (owner || PUBLIC_SCREENS.includes(want)) ? want : owner ? "overview" : "servers";
   for (const k in SCREENS) $("#screen-" + k).hidden = k !== screen;
   document.querySelectorAll(".navlink").forEach(a =>
     a.dataset.tab === screen ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
@@ -451,6 +459,7 @@ function route() {
   if (screen === "upkeep") loadUpkeep();
   if (screen === "logs") { unseenErrors = 0; paintErrCount(); scrollLogs(true); }
   if (screen === "servers") window.dashRoute(rest);
+  if (screen === "commands") window.showGuide();
 }
 addEventListener("hashchange", route);
 $("#railtoggle").onclick = () => document.body.classList.toggle("rail-open");

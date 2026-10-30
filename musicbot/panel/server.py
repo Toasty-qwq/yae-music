@@ -376,8 +376,9 @@ async def dash_proxy(request: web.Request):
     query = {k: v for k, v in request.query.items() if k != "uid"}
     query["uid"] = uid
     body = await request.read() if request.can_read_body else None
-    status_code, data = await sup.bot_proxy(request.method, "/dash/" + request.match_info["tail"], query, body)
-    return web.json_response(data, status=status_code)
+    status_code, content_type, data = await sup.bot_proxy(request.method, "/dash/" + request.match_info["tail"],
+                                                          query, body)
+    return web.Response(body=data, status=status_code, content_type=content_type)
 
 
 # ---- app ---------------------------------------------------------------------------------------
@@ -403,7 +404,7 @@ async def _shutdown(app: web.Application) -> None:
 
 
 def make_app() -> web.Application:
-    app = web.Application(middlewares=[guard], client_max_size=4 * 1024 * 1024)
+    app = web.Application(middlewares=[guard], client_max_size=16 * 1024 * 1024)
     r = app.router
     r.add_get("/", index)
     r.add_get("/favicon.ico", favicon)

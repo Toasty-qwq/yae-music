@@ -97,7 +97,7 @@ async def start(bot: "MusicBot") -> ControlApi | None:
             await p.refresh_np()
         return web.json_response({"ok": True})
 
-    app = web.Application(middlewares=[auth])
+    app = web.Application(middlewares=[auth], client_max_size=16 * 1024 * 1024)  # image uploads
     app.router.add_get("/state", state)
     app.router.add_post("/control", control)
     app.router.add_routes(dashboard.routes(bot))
