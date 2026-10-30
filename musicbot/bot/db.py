@@ -95,6 +95,15 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS reminders_due ON reminders(due);
+CREATE TABLE IF NOT EXISTS forum_grants (  -- forum posts whose tag already gave their author a role
+    guild_id   INTEGER NOT NULL,
+    thread_id  INTEGER NOT NULL,
+    tag_id     INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    role_id    INTEGER NOT NULL,
+    granted_at REAL NOT NULL,
+    PRIMARY KEY (guild_id, thread_id, tag_id)
+);
 CREATE TABLE IF NOT EXISTS member_roles (  -- roles to give back when someone rejoins
     guild_id INTEGER NOT NULL,
     user_id  INTEGER NOT NULL,

@@ -11,6 +11,7 @@ from .commands import Music
 from .community import Community
 from .db import Database
 from .eventlog import EventLog
+from .forumroles import ForumRoles
 from .guildconfig import GuildConfigs
 from .moderation import Moderation
 from .player import GuildPlayer
@@ -56,7 +57,7 @@ class MusicBot(commands.Bot):
     async def setup_hook(self) -> None:
         self.db = await Database.open()
         self.configs = GuildConfigs(self.db)
-        for cog in (Music, Welcome, ReactionRoles, Moderation, EventLog, Tags, Community, Utility):
+        for cog in (Music, Welcome, ReactionRoles, Moderation, EventLog, Tags, Community, Utility, ForumRoles):
             await self.add_cog(cog(self))
         self.api = await api.start(self)
         synced = await self.tree.sync()

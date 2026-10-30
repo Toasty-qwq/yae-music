@@ -90,10 +90,16 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
                   "problem": role_problem(g, r)}
                  for r in reversed(g.roles) if not r.is_default()]
         emojis = [{"id": str(e.id), "name": e.name, "text": str(e), "url": str(e.url)} for e in g.emojis]
+        forums = []
+        for f in sorted(g.forums, key=lambda c: c.position):
+            p = f.permissions_for(me)
+            forums.append({"id": str(f.id), "name": f.name, "can_post": p.view_channel and p.send_messages_in_threads,
+                           "tags": [{"id": str(t.id), "name": t.name, "emoji": str(t.emoji) if t.emoji else "",
+                                     "moderated": t.moderated} for t in f.available_tags]})
         missing = [{"perm": k, "for": v} for k, v in NEEDED.items() if not getattr(me.guild_permissions, k)]
         cfg = await bot.configs.get(g.id)
         return web.json_response({
-            "guild": guild_card(g), "channels": channels, "roles": roles, "emojis": emojis,
+            "guild": guild_card(g), "channels": channels, "roles": roles, "emojis": emojis, "forums": forums,
             "bot_role": me.top_role.name, "missing": missing, "intents": intents(),
             "config": {k: _ids_to_str(v) for k, v in cfg.items()},
             "menus": [_ids_to_str(m) for m in await bot.db.menus(g.id)],

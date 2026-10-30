@@ -5,6 +5,7 @@
 const TABS = [
   {id: "welcome", kanji: "迎", label: "Welcome", group: "People"},
   {id: "roles", kanji: "役", label: "Roles", group: "People"},
+  {id: "forum", kanji: "授", label: "Forum roles", group: "People"},
   {id: "messages", kanji: "文", label: "Messages", group: "Posts"},
   {id: "tags", kanji: "札", label: "Tags", group: "Posts"},
   {id: "replies", kanji: "響", label: "Auto-replies", group: "Posts"},
@@ -254,7 +255,8 @@ function showGuild() {
   $("#crumb-t").textContent = g.name;
   const missing = G.missing.length ? `<div class="note warn" style="margin-bottom:18px"><b>The bot is missing ${G.missing.length === 1 ? "a permission" : "some permissions"}</b>${G.missing.map(m => `${esc(m.perm.replace(/_/g, " "))} (for ${esc(m.for)})`).join(" · ")}. Give its role these in Server Settings → Roles → ${esc(G.bot_role)}.</div>` : "";
   const groups = [...new Set(TABS.map(t => t.group))];
-  const count = {roles: G.menus.length, messages: G.posts.length, tags: G.tags.length, replies: G.config.autoresponders.items.length};
+  const count = {roles: G.menus.length, messages: G.posts.length, tags: G.tags.length, replies: G.config.autoresponders.items.length,
+                 forum: G.config.forumroles.rules.length};
   root().innerHTML = `
     <header class="fleet-head page-intro"><div class="fh-words">
       <p class="eyebrow"><a href="#servers">All servers</a> · <b>${esc(g.id)}</b></p>
@@ -268,7 +270,7 @@ function showGuild() {
     </nav>
     <div id="tab-body"></div>`;
   root().querySelectorAll(".slipbtn").forEach(b => b.onclick = () => { location.hash = `#servers/${g.id}/${b.dataset.tab}`; });
-  ({welcome: tabWelcome, roles: tabRoles, messages: tabMessages, tags: tabTags, replies: tabReplies,
+  ({welcome: tabWelcome, roles: tabRoles, forum: tabForum, messages: tabMessages, tags: tabTags, replies: tabReplies,
     starboard: tabStarboard, suggestions: tabSuggestions, moderation: tabModeration, logging: tabLogging})[tab]();
 }
 
@@ -397,6 +399,78 @@ function menuEditor() {
       editing = null;
       showGuild();
     } catch (e) { toast("bad", "Not posted", e.message); b.classList.remove("busy"); b.disabled = false; }
+  };
+}
+
+/* ---------- Forum roles: a tag on a forum post gives its author a role ---------- */
+function tabForum() {
+  const cfg = G.config.forumroles;
+  if (!G.forums.length) {
+    body().innerHTML = emptyState("idle", "This server has no forum channels",
+      "Forum roles watch a forum channel: when a post gets a tag you pick, like Accepted, its author gets a role. Make a forum channel in Discord first, then come back.");
+    return;
+  }
+  if (!editing) editing = {rules: JSON.parse(JSON.stringify(cfg.rules))};
+  const rules = editing.rules, assignable = G.roles.filter(r => !r.problem);
+  const forumOf = r => G.forums.find(f => f.id === r.forum_id) || G.forums[0];
+  const tagName = (f, id) => { const t = f.tags.find(t => t.id === id); return t ? (t.emoji ? t.emoji + " " : "") + t.name : "?"; };
+  body().innerHTML = `<p class="lede" style="margin-bottom:16px">When a post in a forum gets the tag you pick, the person who made the post gets a role. It doesn't matter who adds the tag, so make the tag moderator-only in the forum's settings.</p>
+    <section class="panel"><header><h3>Forum roles</h3><span class="sp">${rules.length}/25</span></header><div class="pad">
+      <div class="b-row2">${field("fr-log", "Log channel", channelSelect("fr-log", cfg.log_channel_id, "No log"), "A line for every role given or taken, with who added the tag.")}
+        <div class="switches" style="align-content:center">${sw("fr-enabled", "Give roles for tagged posts", cfg.enabled)}</div></div>
+      ${rules.map((r, i) => {
+        const f = forumOf(r);
+        if (!r.forum_id) r.forum_id = f.id;
+        if (!f.tags.some(t => t.id === r.tag_id)) r.tag_id = f.tags[0] ? f.tags[0].id : "";
+        if (!r.role_id && assignable[0]) r.role_id = assignable[0].id;
+        const tag = f.tags.find(t => t.id === r.tag_id);
+        const role = G.roles.find(x => x.id === r.role_id);
+        return `<details class="ar-item" ${r._open ? "open" : ""} data-i="${i}"><summary><b>#${esc(f.name)} · ${esc(tag ? tagName(f, tag.id) : "no tag")} → @${esc(role ? role.name : "?")}</b></summary>
+        <div class="b-row3" style="margin-top:12px">
+          ${field(`fr-f-${i}`, "Forum", `<select id="fr-f-${i}" class="fr-forum">${G.forums.map(x => `<option value="${x.id}" ${x.id === f.id ? "selected" : ""}>#${esc(x.name)}</option>`).join("")}</select>`)}
+          ${field(`fr-t-${i}`, "When a post gets this tag", f.tags.length ? `<select id="fr-t-${i}">${f.tags.map(t => `<option value="${t.id}" ${t.id === r.tag_id ? "selected" : ""}>${esc(tagName(f, t.id))}${t.moderated ? "" : " (anyone can add it)"}</option>`).join("")}</select>` : `<select id="fr-t-${i}" disabled><option>#${esc(f.name)} has no tags</option></select>`)}
+          ${field(`fr-r-${i}`, "Its author gets", `<select id="fr-r-${i}">${assignable.map(x => `<option value="${x.id}" ${x.id === r.role_id ? "selected" : ""}>@${esc(x.name)}</option>`).join("")}</select>`)}
+        </div>
+        ${tag && !tag.moderated ? `<div class="note warn" style="margin-bottom:12px"><b>Anyone can add this tag</b>The post's author could tag their own post and get the role. In Discord, edit #${esc(f.name)} → Tags → ${esc(tag.name)} → turn on "Only allow moderators to apply this tag".</div>` : ""}
+        ${!f.tags.length ? `<div class="note warn" style="margin-bottom:12px"><b>No tags yet</b>Add tags to #${esc(f.name)} in Discord (edit the forum → Tags), then reload this page.</div>` : ""}
+        <div class="switches" style="margin-bottom:12px">
+          ${sw(`fr-rm-${i}`, "Take the role away if the tag is removed again", r.remove_on_untag)}
+          ${sw(`fr-me-${i}`, "Post a message in the post", r.message_enabled)}
+          ${sw(`fr-dm-${i}`, "Send the author a DM", r.dm_enabled)}</div>
+        <div id="fr-mbox-${i}" ${r.message_enabled ? "" : "hidden"}>${builderHost("frm" + i, r.message || newMessage("Congratulations {user}, your post was accepted!"), {contentLabel: "Message in the post"})}</div>
+        <div id="fr-dbox-${i}" ${r.dm_enabled ? "" : "hidden"}>${builderHost("frd" + i, r.dm || newMessage("Your post in {server} was accepted, and you've been given a new role."), {contentLabel: "DM"})}</div>
+        ${!f.can_post && r.message_enabled ? `<div class="note warn" style="margin-bottom:12px"><b>The bot can't post in #${esc(f.name)}</b>Give it View Channel and Send Messages in Threads there.</div>` : ""}
+        <div class="btnrow">${btn(`fr-del-${i}`, "Remove this rule", "sm ghost")}</div></details>`;
+      }).join("")}
+      ${rules.length ? "" : `<p class="muted">No rules yet. Add one: a forum, a tag and a role.</p>`}
+      <div class="btnrow" style="margin-top:14px">${btn("fr-add", "Add a rule", "", "plus")}${btn("fr-save", "Save", "primary", "save")}</div>
+      <p class="help" style="margin-top:10px">If the bot was offline when a post was tagged, it gives the role when it comes back, quietly (no message or DM), for the newest posts.</p>
+    </div></section>`;
+  rules.forEach((r, i) => { wireBuilder("frm" + i); wireBuilder("frd" + i); });
+  const grab = () => rules.forEach((r, i) => {
+    r.forum_id = val(`fr-f-${i}`); r.tag_id = $(`#fr-t-${i}`).disabled ? "" : val(`fr-t-${i}`); r.role_id = val(`fr-r-${i}`);
+    r.remove_on_untag = on(`fr-rm-${i}`); r.message_enabled = on(`fr-me-${i}`); r.dm_enabled = on(`fr-dm-${i}`);
+    r.message = readBuilder("frm" + i); r.dm = readBuilder("frd" + i); r._open = $(`details[data-i="${i}"]`).open;
+  });
+  rules.forEach((r, i) => {
+    $(`#fr-f-${i}`).onchange = () => { grab(); r.tag_id = ""; tabForum(); };
+    $(`#fr-t-${i}`).onchange = () => { grab(); tabForum(); };
+    $(`#fr-me-${i}`).onchange = e => { $(`#fr-mbox-${i}`).hidden = !e.target.checked; };
+    $(`#fr-dm-${i}`).onchange = e => { $(`#fr-dbox-${i}`).hidden = !e.target.checked; };
+    $(`#fr-del-${i}`).onclick = () => { grab(); rules.splice(i, 1); tabForum(); };
+  });
+  $("#fr-add").onclick = () => {
+    grab();
+    if (!assignable.length) return toast("warn", "No role to give yet", `The bot can't hand out any role. Drag its role (${G.bot_role}) above the roles it should give.`);
+    rules.push({forum_id: G.forums[0].id, tag_id: "", role_id: assignable[0].id, remove_on_untag: false,
+                message_enabled: false, dm_enabled: false, _open: true});
+    tabForum();
+  };
+  $("#fr-save").onclick = async () => {
+    grab();
+    const ok = await saveSection("forumroles", {enabled: on("fr-enabled"), log_channel_id: val("fr-log") || null,
+      rules: rules.map(({_open, ...x}) => x)}, "Tagged posts give their authors these roles from now on.");
+    if (ok) { editing = null; showGuild(); }
   };
 }
 
@@ -640,6 +714,7 @@ const GUIDE = [
     ["/warn · /warnings", "Warn someone, or see someone's history", "Timeout Members"],
     ["/case · /reason", "Look up a case, change its reason", "Timeout Members"],
     ["/purge", "Delete up to 500 recent messages, optionally from one person", "Manage Messages"]]},
+  {area: "Forum roles", kanji: "授", how: "Set up on Servers → Forum roles. When a post in a forum gets the tag you pick (for example Accepted), the person who made the post gets a role. Optionally the role goes again when the tag is removed, and the bot posts a message in the post or DMs the author. Make the tag moderator-only in the forum's settings, so authors can't tag their own posts.", cmds: []},
   {area: "Tags", kanji: "札", how: "Saved messages anyone can post by name. Make text tags in Discord, or tags with embeds and images on Servers → Tags.", cmds: [
     ["/tag show", "Post a tag (type to search the names)", "everyone"],
     ["/tag list · /tag info", "Every tag, or who made one and how often it's used", "everyone"],
@@ -660,9 +735,9 @@ window.showGuide = () => {
       <h1 class="brush fh-title">Commands</h1>
       <p class="lede">Everything the bot does, by area. Type / in Discord to see them there too. Who can use each one is listed beside it; server admins can change that in Server Settings → Integrations → the bot.</p>
     </div><img class="mascot fh-fox" src="${M("nod")}" alt="" width="92" height="92"></header>
-    <div class="stack">${GUIDE.map(g => `<section class="panel"><header><h3>${g.area}</h3><span class="sp">${g.cmds.length}</span></header><div class="pad">
-      <p>${esc(g.how)}</p><div class="tablewrap"><table class="tbl"><thead><tr><th>Command</th><th>What it does</th><th>Who can use it</th></tr></thead><tbody>
+    <div class="stack">${GUIDE.map(g => `<section class="panel"><header><h3>${g.area}</h3><span class="sp">${g.cmds.length || ""}</span></header><div class="pad">
+      <p>${esc(g.how)}</p>${g.cmds.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Command</th><th>What it does</th><th>Who can use it</th></tr></thead><tbody>
       ${g.cmds.map(([c, w, who]) => `<tr><td class="mono" style="white-space:nowrap">${esc(c)}</td><td>${esc(w)}</td><td>${who === "everyone" ? '<span class="pill ok">Everyone</span>' : `<span class="pill ghost">${esc(who)}</span>`}</td></tr>`).join("")}
-      </tbody></table></div></div></section>`).join("")}</div>`;
+      </tbody></table></div>` : '<p class="muted">No commands: it works by itself once it is set up.</p>'}</div></section>`).join("")}</div>`;
 };
 })();

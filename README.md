@@ -110,6 +110,7 @@ panel's **Servers** page:
 |---|---|
 | Welcome | Welcome and farewell messages and a welcome DM, built with the **embed builder**. **Autorole** gives new members and bots roles, and can give people their roles back when they rejoin. Test with `/greetings testgreet` |
 | Roles | **Reaction-role menus**: a message with buttons, a dropdown, or emoji reactions that members click to give themselves roles. Modes: toggle, one-at-a-time, or get-only |
+| Forum roles | When a forum post gets a tag you pick (say "Accepted"), the person who made the post gets a role. Optionally the role goes again when the tag is removed, and the bot posts a message in the post or DMs the author. Make the tag moderator-only in the forum's settings so authors can't tag their own posts |
 | Messages | Post your own messages and embeds (rules, announcements, info panels) and edit them later |
 | Tags | Saved messages anyone posts with `/tag show <name>` |
 | Auto-replies | When a message contains a trigger word, the bot answers with a message you build |

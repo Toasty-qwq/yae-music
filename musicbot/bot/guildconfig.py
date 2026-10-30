@@ -24,6 +24,8 @@ FAREWELL_DEFAULT = messages.message(
     thumbnail="{user.avatar}")
 DM_DEFAULT = messages.message("Welcome to {server}, {user.name}. Glad you're here.")
 MATCHES = ("contains", "word", "exact", "starts")
+FORUM_MESSAGE = messages.message("Congratulations {user}, your post was accepted!")
+FORUM_DM = messages.message("Your post in {server} was accepted, and you've been given a new role.")
 
 DEFAULTS: dict = {
     "welcome": {"enabled": False, "channel_id": None, "message": WELCOME_DEFAULT,
@@ -41,6 +43,7 @@ DEFAULTS: dict = {
     "starboard": {"enabled": False, "channel_id": None, "emoji": "\u2b50", "threshold": 3,
                   "self_star": False, "ignored_channel_ids": []},
     "suggestions": {"enabled": False, "channel_id": None, "anonymous": False, "dm_on_decision": True},
+    "forumroles": {"enabled": False, "log_channel_id": None, "rules": []},
 }
 SECTIONS = tuple(DEFAULTS)
 MESSAGE_KEYS = {"message", "dm"}  # whole message dicts: replaced, never merged key by key
@@ -276,6 +279,56 @@ def _logging(guild, d):
     }
 
 
+def _forumroles(guild, d):
+    rules, seen = [], set()
+    for i, r in enumerate(d.get("rules") or [], start=1):
+        try:
+            forum = guild.get_channel(int(r.get("forum_id") or 0))
+        except (TypeError, ValueError):
+            forum = None
+        if not isinstance(forum, discord.ForumChannel):
+            raise ConfigError(f"Rule {i}: pick the forum channel it watches.")
+        tag = next((t for t in forum.available_tags if str(t.id) == str(r.get("tag_id"))), None)
+        if tag is None:
+            raise ConfigError(f"Rule {i}: pick one of #{forum.name}'s tags (that tag may have been deleted).")
+        try:
+            role = guild.get_role(int(r.get("role_id") or 0))
+        except (TypeError, ValueError):
+            role = None
+        if role is None:
+            raise ConfigError(f"Rule {i}: pick the role it gives.")
+        problem = role_problem(guild, role)
+        if problem:
+            raise ConfigError(f"Rule {i}: {problem}")
+        if (forum.id, tag.id) in seen:
+            raise ConfigError(f"Rule {i}: #{forum.name} already has a rule for the {tag.name} tag.")
+        seen.add((forum.id, tag.id))
+        message_enabled = bool(r.get("message_enabled"))
+        if message_enabled:
+            p = forum.permissions_for(guild.me)
+            if not (p.view_channel and p.send_messages_in_threads and p.embed_links):
+                raise ConfigError(f"Rule {i}: to post in #{forum.name}'s posts the bot needs View Channel, "
+                                  "Send Messages in Threads and Embed Links there.")
+        dm_enabled = bool(r.get("dm_enabled"))
+        rules.append({
+            "forum_id": forum.id, "tag_id": tag.id, "role_id": role.id,
+            "remove_on_untag": bool(r.get("remove_on_untag")),
+            "message_enabled": message_enabled,
+            "message": messages.validate(r.get("message"), f"Rule {i}'s message") if message_enabled else
+                       (messages.upgrade(r["message"]) if r.get("message") else FORUM_MESSAGE),
+            "dm_enabled": dm_enabled,
+            "dm": messages.validate(r.get("dm"), f"Rule {i}'s DM") if dm_enabled else
+                  (messages.upgrade(r["dm"]) if r.get("dm") else FORUM_DM),
+        })
+    if len(rules) > 25:
+        raise ConfigError("A server can have up to 25 forum rules.")
+    return {
+        "enabled": _bool(d, "enabled", False),
+        "log_channel_id": _channel(guild, d.get("log_channel_id"), "the forum-role log", required=False),
+        "rules": rules,
+    }
+
+
 VALIDATORS = {"welcome": _welcome, "farewell": _farewell, "autorole": _autorole,
               "moderation": _moderation, "logging": _logging, "autoresponders": _autoresponders,
-              "starboard": _starboard, "suggestions": _suggestions}
+              "starboard": _starboard, "suggestions": _suggestions, "forumroles": _forumroles}
