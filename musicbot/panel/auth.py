@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import time
@@ -57,17 +58,40 @@ def _secret() -> bytes:
     return (s + "|" + (os.environ.get("PANEL_PASSWORD") or _stored())).encode()
 
 
-def make_session() -> str:
-    expiry = str(int(time.time()) + SESSION_DAYS * 86400)
-    sig = hmac.new(_secret(), expiry.encode(), hashlib.sha256).hexdigest()
-    return f"{expiry}.{sig}"
+USER_SESSION_DAYS = 7
+
+
+def _sign(body: str) -> str:
+    return hmac.new(_secret(), body.encode(), hashlib.sha256).hexdigest()
+
+
+def make_session(kind: str = "owner", user: dict | None = None) -> str:
+    """A signed cookie value. ``kind`` is ``owner`` (panel password) or ``user`` (signed in with Discord)."""
+    days = SESSION_DAYS if kind == "owner" else USER_SESSION_DAYS
+    payload = {"k": kind, "exp": int(time.time()) + days * 86400}
+    if user:
+        payload["u"] = {"id": str(user["id"]), "name": user.get("name", ""), "avatar": user.get("avatar")}
+    body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
+    return f"{body}.{_sign(body)}"
+
+
+def session(value: str | None) -> dict | None:
+    """The session in a cookie, or None if it is missing, forged or expired."""
+    if not value or "." not in value:
+        return None
+    body, sig = value.rsplit(".", 1)
+    if not hmac.compare_digest(sig, _sign(body)):
+        return None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    except ValueError:
+        return None
+    if not isinstance(payload, dict) or payload.get("exp", 0) < time.time() or payload.get("k") not in ("owner", "user"):
+        return None
+    return payload
 
 
 def valid_session(value: str | None) -> bool:
-    if not value or "." not in value:
-        return False
-    expiry, sig = value.split(".", 1)
-    if not expiry.isdigit() or int(expiry) < time.time():
-        return False
-    good = hmac.new(_secret(), expiry.encode(), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(sig, good)
+    """True for the panel owner's session only."""
+    s = session(value)
+    return bool(s and s["k"] == "owner")

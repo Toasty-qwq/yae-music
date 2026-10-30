@@ -15,9 +15,9 @@
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) d.classList.add("js-motion");
   })();
 </script>
-<link rel="stylesheet" href="/ds/tokens.css">
-<link rel="stylesheet" href="/ds/bundle.css">
-<link rel="stylesheet" href="/ds/app.css">
+<link rel="stylesheet" href="/ds/tokens.css?v=__V__">
+<link rel="stylesheet" href="/ds/bundle.css?v=__V__">
+<link rel="stylesheet" href="/ds/app.css?v=__V__">
 </head>
 <body>
 <a class="skiplink" href="#main">Skip to the content</a>
@@ -33,6 +33,11 @@
     <div class="gate-mark"><img class="mascot" id="gate-fox" src="/ds/mascots/wave.gif" alt="" width="84" height="84" draggable="false"></div>
     <h1 class="gate-name">Yae Music</h1>
     <p class="gate-sub" id="gate-sub">Control panel</p>
+    <div class="gate-form" id="gate-discord" hidden>
+      <a class="btn primary block" href="/auth/discord" id="discord-btn"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H8"/></svg><span>Sign in with Discord</span></a>
+      <p class="gate-foot" style="margin:6px 0 4px">Manage the servers where you have the Manage Server permission.</p>
+      <button class="btn ghost block" type="button" id="owner-toggle"><span>I run this panel: use the password</span></button>
+    </div>
     <form class="gate-form" id="gate-form" novalidate>
       <input class="inp" type="password" id="pw1" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
       <input class="inp" type="password" id="pw2" placeholder="The same password again" aria-label="Repeat the password" autocomplete="new-password" hidden>
@@ -53,10 +58,11 @@
     </a>
     <div class="rail-nav">
       <div class="sec">The bot</div>
-      <a class="navlink" href="#overview" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/></svg><span>Overview</span></a>
-      <a class="navlink" href="#logs" data-tab="logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h3"/></svg><span>Logs</span><span class="count alarm" id="err-count" hidden></span></a>
-      <a class="navlink" href="#settings" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4"/></svg><span>Settings</span></a>
-      <a class="navlink" href="#upkeep" data-tab="upkeep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 4.5a4.5 4.5 0 0 0-5.9 5.9L4 16v4h4l5.6-5.6a4.5 4.5 0 0 0 5.9-5.9L17 11l-3-3z"/></svg><span>Upkeep</span></a>
+      <a class="navlink" href="#overview" data-tab="overview" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/></svg><span>Overview</span></a>
+      <a class="navlink" href="#servers" data-tab="servers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 19v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V19M9.5 9.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM21 19v-1.5a4 4 0 0 0-3-3.9M16 3.6a4 4 0 0 1 0 7.8"/></svg><span>Servers</span></a>
+      <a class="navlink" href="#logs" data-tab="logs" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h3"/></svg><span>Logs</span><span class="count alarm" id="err-count" hidden></span></a>
+      <a class="navlink" href="#settings" data-tab="settings" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4"/></svg><span>Settings</span></a>
+      <a class="navlink" href="#upkeep" data-tab="upkeep" data-owner><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 4.5a4.5 4.5 0 0 0-5.9 5.9L4 16v4h4l5.6-5.6a4.5 4.5 0 0 0 5.9-5.9L17 11l-3-3z"/></svg><span>Upkeep</span></a>
     </div>
     <div style="flex:1"></div>
     <div class="cmp" id="cmp">
@@ -69,6 +75,7 @@
     <div class="rail-foot">
       <button class="btn sm ghost icon" type="button" id="theme-btn" aria-label="Use the dark theme"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="theme-ico" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></button>
       <button class="btn sm ghost" type="button" id="logout-btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg><span>Sign out</span></button>
+      <span class="conn ok" id="who" hidden><span id="who-name"></span></span>
       <span class="conn" id="conn"><span class="conn-lamp" aria-hidden="true"></span><span id="conn-word">Linking</span></span>
     </div>
   </nav>
@@ -139,6 +146,11 @@
           </div>
         </section>
 
+        <!-- ============ Servers (the dashboard; filled by dashboard.js) ============ -->
+        <section class="screen" id="screen-servers" aria-label="Servers" hidden>
+          <div id="dash-root"></div>
+        </section>
+
         <!-- ============ Logs ============ -->
         <section class="screen" id="screen-logs" aria-labelledby="lg-title" hidden>
           <section class="panel">
@@ -206,6 +218,22 @@
                     <div class="field"><label for="s-max_queue">Longest queue</label><input type="number" id="s-max_queue" min="1" max="10000"></div>
                     <div class="field"><label for="s-ffmpeg_path">FFmpeg</label><input type="text" id="s-ffmpeg_path">
                       <div class="help">Usually just <code>ffmpeg</code>. On Windows this can be the full path to ffmpeg.exe.</div></div>
+                  </div>
+                </section>
+                <section class="panel">
+                  <header><h3>Discord sign-in</h3><span class="sp" id="oauth-state"></span></header>
+                  <div class="pad">
+                    <p>Lets server admins sign in with Discord and manage their own servers on the Servers page. Set it up once:</p>
+                    <ol style="margin:0 0 14px;padding-left:20px;font-size:13.5px;line-height:1.6">
+                      <li>Type the address people open this panel at, below, and save.</li>
+                      <li>In the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Developer Portal</a>, open the bot's application, then <b>OAuth2</b>.</li>
+                      <li>Under <b>Redirects</b>, add this exact URL: <code id="oauth-redirect">save the address first</code></li>
+                      <li>Copy the <b>Client Secret</b> from that page (Reset Secret if none shows) into the field below, and save.</li>
+                    </ol>
+                    <div class="field"><label for="s-public_url">Public address</label><input type="text" id="s-public_url" placeholder="https://music.example.com">
+                      <div class="help">Where people open the panel, with https. No path after the name.</div></div>
+                    <div class="field"><label for="s-oauth_client_secret">Client secret</label><input type="password" id="s-oauth_client_secret">
+                      <div class="help">Leave it empty to keep the saved one. The Client ID comes from the running bot by itself<span id="oauth-client"></span>.</div></div>
                   </div>
                 </section>
                 <section class="panel">
@@ -297,6 +325,8 @@ const ICON = {
   moon: "M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z",
   wrench: "M15.5 4.5a4.5 4.5 0 0 0-5.9 5.9L4 16v4h4l5.6-5.6a4.5 4.5 0 0 0 5.9-5.9L17 11l-3-3z",
   log: "M6 3h12v18H6zM9 7h6M9 11h6M9 15h3",
+  save: "M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6",
+  plus: "M12 5v14M5 12h14",
 };
 const svg = (name, size = 13) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${ICON[name]}"/></svg>`;
 
@@ -365,7 +395,11 @@ function showGate(setup) {
   $("#pw1").placeholder = setup ? "Choose a password" : "Password";
   $("#gate-sub").textContent = setup ? "First visit: choose a password" : "Control panel";
   $("#gate-btn span:last-child").textContent = setup ? "Set the password" : "Sign in";
-  $("#gate-foot").hidden = setup;
+  const discordFirst = discordLogin && !setup;
+  $("#gate-discord").hidden = !discordFirst;
+  $("#gate-form").hidden = discordFirst;
+  $("#gate-foot").hidden = setup || discordFirst;
+  $("#gate-btn").classList.toggle("primary", !discordFirst);
   $("#gate-fox").src = M("wave");
   $("#pw1").focus();
 }
@@ -391,7 +425,7 @@ $("#gate-form").onsubmit = async ev => {
     await api(setupMode ? "/api/setup" : "/api/login", {method: "POST", body: {password: pw}});
     $("#pw1").value = $("#pw2").value = "";
     $("#gate").classList.add("opening");
-    setTimeout(enterApp, document.documentElement.classList.contains("js-motion") ? 480 : 0);
+    setTimeout(() => enterApp({kind: "owner", user: null}), document.documentElement.classList.contains("js-motion") ? 480 : 0);
   } catch (err) {
     gateError(err.message === "Wrong password." ? "That password is not the one this panel was given." : err.message);
   } finally {
@@ -401,11 +435,13 @@ $("#gate-form").onsubmit = async ev => {
 };
 
 /* ---------- screens ---------- */
-const SCREENS = {overview: "Overview", logs: "Logs", settings: "Settings", upkeep: "Upkeep"};
+const SCREENS = {overview: "Overview", servers: "Servers", logs: "Logs", settings: "Settings", upkeep: "Upkeep"};
 let screen = "overview";
+window.ME = {kind: null, user: null};
 function route() {
-  const want = location.hash.slice(1);
-  screen = SCREENS[want] ? want : "overview";
+  const [want, ...rest] = location.hash.slice(1).split("/");
+  const owner = ME.kind === "owner";
+  screen = SCREENS[want] && (owner || want === "servers") ? want : owner ? "overview" : "servers";
   for (const k in SCREENS) $("#screen-" + k).hidden = k !== screen;
   document.querySelectorAll(".navlink").forEach(a =>
     a.dataset.tab === screen ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
@@ -414,6 +450,7 @@ function route() {
   if (screen === "settings") loadSettings();
   if (screen === "upkeep") loadUpkeep();
   if (screen === "logs") { unseenErrors = 0; paintErrCount(); scrollLogs(true); }
+  if (screen === "servers") window.dashRoute(rest);
 }
 addEventListener("hashchange", route);
 $("#railtoggle").onclick = () => document.body.classList.toggle("rail-open");
@@ -773,13 +810,17 @@ $("#log-clear").onclick = async () => {
 
 /* ---------- settings ---------- */
 const FIELDS = ["discord_token", "spotify_client_id", "spotify_client_secret", "default_volume", "idle_timeout",
-                "max_playlist", "max_queue", "ffmpeg_path", "autostart", "auto_restart", "update_ytdlp_on_start"];
+                "max_playlist", "max_queue", "ffmpeg_path", "autostart", "auto_restart", "update_ytdlp_on_start",
+                "public_url", "oauth_client_secret"];
 async function loadSettings() {
   try {
     const s = await api("/api/settings");
     const where = $("#st-where");
     where.textContent = s.data_dir.split(/[\\/]/).filter(Boolean).pop() + "/settings.json";
     where.title = s.data_dir;
+    $("#oauth-redirect").textContent = s.oauth.redirect_uri || "save the public address first";
+    $("#oauth-state").innerHTML = s.oauth.configured ? '<span class="pill ok">On</span>' : '<span class="pill dead">Off</span>';
+    $("#oauth-client").textContent = s.oauth.client_id ? ` (${s.oauth.client_id})` : " once it has connected to Discord";
     for (const k of FIELDS) {
       const el = $("#s-" + k);
       el.disabled = s.env_locked.includes(k);
@@ -878,22 +919,50 @@ $("#logout-btn").onclick = async () => {
 
 /* ---------- start ---------- */
 let timers = [];
-function enterApp() {
+function enterApp(me) {
+  if (me) window.ME = me;
+  const owner = ME.kind === "owner";
   $("#gate").hidden = true;
   $("#shell").hidden = false;
   paintTheme();
+  // A Discord sign-in sees only the Servers page: no power buttons, no log, no panel settings.
+  document.querySelectorAll("[data-owner]").forEach(el => el.hidden = !owner);
+  $("#power").hidden = $("#cmp").hidden = $("#conn").hidden = !owner;
+  $("#who").hidden = owner;
+  if (!owner && ME.user) $("#who-name").textContent = ME.user.name;
   timers.forEach(clearInterval);
-  timers = [setInterval(() => { if (!document.hidden) poll(); }, 2000), setInterval(tickProgress, 1000)];
-  connectLogs();
+  timers = [];
+  if (owner) {
+    timers = [setInterval(() => { if (!document.hidden) poll(); }, 2000), setInterval(tickProgress, 1000)];
+    connectLogs();
+    poll();
+  }
   route();
-  poll();
 }
+const LOGIN_ERRORS = {
+  not_configured: "Discord sign-in isn't set up on this panel yet. Its owner turns it on in Settings.",
+  cancelled: "The Discord sign-in was cancelled.",
+  state: "That sign-in took too long or came from another tab. Try again.",
+  redirect: "Discord doesn't know this panel's address yet. The owner adds the redirect URL from Settings in the Developer Portal.",
+  secret: "Discord refused this panel's client secret. The owner pastes a fresh one into Settings.",
+  discord: "Discord didn't answer. Try again in a moment.",
+};
+let discordLogin = false;
+$("#owner-toggle").onclick = () => { $("#gate-discord").hidden = true; $("#gate-form").hidden = false; $("#gate-foot").hidden = false; $("#gate-btn").classList.add("primary"); $("#pw1").focus(); };
 (async () => {
+  const err = new URLSearchParams(location.search).get("login_error");
+  if (err) history.replaceState(null, "", location.pathname + location.hash);
   try {
     const a = await fetch("/api/auth").then(r => r.json());
-    if (a.logged_in) enterApp(); else showGate(a.setup);
+    discordLogin = a.discord_login;
+    if (a.logged_in) enterApp({kind: a.kind, user: a.user});
+    else {
+      showGate(a.setup);
+      if (err) gateError(LOGIN_ERRORS[err] || "The sign-in didn't work. Try again.");
+    }
   } catch { showGate(false); gateError("The panel is not answering. Check that it is running."); }
 })();
 </script>
+<script src="/dashboard.js?v=__V__"></script>
 </body>
 </html>

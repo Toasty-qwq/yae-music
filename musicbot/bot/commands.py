@@ -297,9 +297,13 @@ class Music(commands.Cog):
 
     @app_commands.command(description="Show the music commands")
     async def help(self, interaction: discord.Interaction):
-        lines = [f"**/{c.name}** — {c.description}" for c in self.get_app_commands()]
-        e = discord.Embed(title="Music commands", description="\n".join(lines), color=ui.COLOR)
-        e.set_footer(text="Join a voice channel, then /play a link or some search words.")
+        e = discord.Embed(title="Commands", color=ui.COLOR)
+        for cog_name, title in (("Music", "Music"), ("Moderation", "Moderation (needs the matching permission)")):
+            cog = self.bot.get_cog(cog_name)
+            if cog:
+                lines = [f"**/{c.name}** {c.description}" for c in cog.get_app_commands()]
+                e.add_field(name=title, value="\n".join(lines)[:1024], inline=False)
+        e.set_footer(text="Welcome messages, role menus and logs are set up on the bot's dashboard.")
         await interaction.response.send_message(embed=e, ephemeral=True)
 
     # ---- leaving when idle / alone -------------------------------------------------------------

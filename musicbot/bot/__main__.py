@@ -34,17 +34,21 @@ def main() -> int:
 
     from .client import MusicBot
 
-    async def run() -> None:
-        async with MusicBot(cfg) as bot:  # closes the HTTP session even when login fails
+    async def run(privileged: bool) -> None:
+        async with MusicBot(cfg, privileged=privileged) as bot:  # closes its HTTP session even when login fails
             await bot.start(token)
 
     try:
-        asyncio.run(run())
+        try:
+            asyncio.run(run(True))
+        except discord.PrivilegedIntentsRequired:
+            # Music still works without them; welcome messages, autorole, logs and member checks don't.
+            log.warning("Discord refused the Server Members and Message Content intents. Turn both on: Developer "
+                        "Portal → your application → Bot → Privileged Gateway Intents, then restart the bot. "
+                        "Running without them for now: music works, welcome messages, autorole and logs don't.")
+            asyncio.run(run(False))
     except discord.LoginFailure:
         log.error("Discord rejected the bot token. Copy a fresh one from the Developer Portal (Bot > Reset Token).")
-        return EXIT_BAD_TOKEN
-    except discord.PrivilegedIntentsRequired:
-        log.error("Discord refused an intent this bot asked for.")
         return EXIT_BAD_TOKEN
     except KeyboardInterrupt:
         pass

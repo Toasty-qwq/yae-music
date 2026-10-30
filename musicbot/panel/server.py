@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -16,17 +17,19 @@ from pathlib import Path
 from aiohttp import web
 
 from .. import settings
-from . import auth
+from . import auth, discord_login
 from .supervisor import Supervisor
 
 log = logging.getLogger("musicbot.panel")
 STATIC = Path(__file__).parent / "static"
 OPEN_PATHS = {"/", "/healthz", "/api/auth", "/api/login", "/api/setup", "/favicon.ico"}
-SECRET_KEYS = {"discord_token", "spotify_client_secret"}
+ANY_SESSION = ("/api/dash/", "/api/logout")  # Discord sign-ins reach only these; everything else is the owner's
+SECRET_KEYS = {"discord_token", "spotify_client_secret", "oauth_client_secret"}
 INT_KEYS = {"default_volume": (0, 200), "idle_timeout": (0, 1440), "max_playlist": (1, 5000),
             "max_queue": (1, 10000)}
 BOOL_KEYS = {"autostart", "auto_restart", "update_ytdlp_on_start"}
-STR_KEYS = {"discord_token", "spotify_client_id", "spotify_client_secret", "ffmpeg_path"}
+STR_KEYS = {"discord_token", "spotify_client_id", "spotify_client_secret", "ffmpeg_path", "public_url",
+            "oauth_client_secret"}
 
 sup = Supervisor()
 _update_lock = asyncio.Lock()
@@ -39,8 +42,12 @@ _ffmpeg_version: str | None = None
 async def guard(request: web.Request, handler):
     path = request.path
     if path.startswith("/api/") and path not in OPEN_PATHS:
-        if not auth.valid_session(request.cookies.get(auth.COOKIE)):
+        s = auth.session(request.cookies.get(auth.COOKIE))
+        if s is None:
             return web.json_response({"error": "login required"}, status=401)
+        if s["k"] != "owner" and not path.startswith(ANY_SESSION):
+            return web.json_response({"error": "Only the panel's owner can open that."}, status=403)
+        request["session"] = s
     if request.method in ("POST", "PUT", "DELETE") and request.headers.get("X-Requested-With") != "musicbot":
         return web.json_response({"error": "bad request"}, status=400)  # blocks cross-site form posts
     try:
@@ -52,17 +59,28 @@ async def guard(request: web.Request, handler):
         return web.json_response({"error": str(e)}, status=500)
 
 
-def _login_response(data: dict) -> web.Response:
+def _login_response(data: dict, request: web.Request | None = None) -> web.Response:
     resp = web.json_response(data)
-    resp.set_cookie(auth.COOKIE, auth.make_session(), max_age=auth.SESSION_DAYS * 86400,
-                    httponly=True, samesite="Strict")
+    secure = bool(request and discord_login._https(request))
+    resp.set_cookie(auth.COOKIE, auth.make_session("owner"), max_age=auth.SESSION_DAYS * 86400,
+                    httponly=True, samesite="Strict", secure=secure)
     return resp
 
 
 # ---- pages / auth -----------------------------------------------------------------------------
 
+def _asset_version() -> str:
+    """Changes whenever a static file does, so browsers fetch the new css/js after an update."""
+    return str(int(max(f.stat().st_mtime for f in STATIC.rglob("*") if f.is_file())))
+
+
 async def index(_):
-    return web.FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+    html = (STATIC / "index.html").read_text("utf-8").replace("__V__", _asset_version())
+    return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
+
+
+async def dashboard_js(_):
+    return web.FileResponse(STATIC / "dashboard.js", headers={"Cache-Control": "no-store"})
 
 
 async def favicon(_):
@@ -74,8 +92,10 @@ async def healthz(_):
 
 
 async def auth_state(request):
-    return web.json_response({"setup": auth.needs_setup(),
-                              "logged_in": auth.valid_session(request.cookies.get(auth.COOKIE))})
+    s = auth.session(request.cookies.get(auth.COOKIE))
+    return web.json_response({"setup": auth.needs_setup(), "logged_in": s is not None,
+                              "kind": s["k"] if s else None, "user": (s or {}).get("u"),
+                              "discord_login": discord_login.configured()})
 
 
 async def setup(request):
@@ -86,7 +106,7 @@ async def setup(request):
         return web.json_response({"error": "Use at least 6 characters."}, status=400)
     auth.set_password(pw)
     sup.panel_log("Panel password created.")
-    return _login_response({"ok": True})
+    return _login_response({"ok": True}, request)
 
 
 async def login(request):
@@ -95,7 +115,7 @@ async def login(request):
         await asyncio.sleep(1.0)  # slow down guessing
         sup.panel_log(f"Failed panel login from {request.remote}.", "warn")
         return web.json_response({"error": "Wrong password."}, status=401)
-    return _login_response({"ok": True})
+    return _login_response({"ok": True}, request)
 
 
 async def logout(_):
@@ -115,7 +135,7 @@ async def change_password(request):
         return web.json_response({"error": "Use at least 6 characters."}, status=400)
     auth.set_password(body["new"])
     sup.panel_log("Panel password changed.")
-    return _login_response({"ok": True})
+    return _login_response({"ok": True}, request)
 
 
 # ---- bot ---------------------------------------------------------------------------------------
@@ -131,6 +151,8 @@ async def status(_):
     if data["bot"] and data["bot"].get("id"):
         from ..bot.client import invite_url
         data["bot"]["invite"] = invite_url(int(data["bot"]["id"]))
+        if settings.raw().get("application_id") != data["bot"]["id"]:
+            settings.update({"application_id": data["bot"]["id"]})  # the Client ID Discord sign-in needs
     return web.json_response(data)
 
 
@@ -215,6 +237,8 @@ async def get_settings(_):
     out["env_locked"] = sorted(settings.env_locked())
     out["has_cookies"] = settings.COOKIES_FILE.is_file()
     out["data_dir"] = str(settings.DATA_DIR)
+    out["oauth"] = {"redirect_uri": discord_login.config()["redirect_uri"], "configured": discord_login.configured(),
+                    "client_id": cfg.get("application_id") or ""}
     return web.json_response(out)
 
 
@@ -239,6 +263,11 @@ async def put_settings(request):
             v = str(v).strip()
             if k in SECRET_KEYS and not v:
                 continue  # empty secret field = keep the stored one
+            if k == "public_url" and v and not re.match(r"^https?://[^/\s]+$", v.rstrip("/")):
+                return web.json_response({"error": "The public address must look like https://music.example.com "
+                                                   "(no path after the name)."}, status=400)
+            if k == "public_url":
+                v = v.rstrip("/")
             changes[k] = v
     if body.get("clear_spotify"):
         changes["spotify_client_id"] = ""
@@ -339,6 +368,18 @@ async def delete_cookies(_):
     return web.json_response({"ok": True})
 
 
+# ---- dashboard (owner and Discord sign-ins) -------------------------------------------------------
+
+async def dash_proxy(request: web.Request):
+    s = request["session"]
+    uid = "owner" if s["k"] == "owner" else s["u"]["id"]
+    query = {k: v for k, v in request.query.items() if k != "uid"}
+    query["uid"] = uid
+    body = await request.read() if request.can_read_body else None
+    status_code, data = await sup.bot_proxy(request.method, "/dash/" + request.match_info["tail"], query, body)
+    return web.json_response(data, status=status_code)
+
+
 # ---- app ---------------------------------------------------------------------------------------
 
 async def _boot(app: web.Application) -> None:
@@ -366,9 +407,13 @@ def make_app() -> web.Application:
     r = app.router
     r.add_get("/", index)
     r.add_get("/favicon.ico", favicon)
+    r.add_get("/dashboard.js", dashboard_js)
     r.add_static("/ds/", STATIC / "ds")  # the Shrine Fox design system: css, mascots, backdrops
     r.add_get("/healthz", healthz)
     r.add_get("/api/auth", auth_state)
+    r.add_get("/auth/discord", discord_login.start)
+    r.add_get("/auth/discord/callback", discord_login.callback)
+    r.add_route("*", "/api/dash/{tail:.+}", dash_proxy)
     r.add_post("/api/setup", setup)
     r.add_post("/api/login", login)
     r.add_post("/api/logout", logout)

@@ -218,6 +218,23 @@ class Supervisor:
                                  headers={"X-Token": self.api_token}) as r:
                 return await r.json(content_type=None)
 
+    async def bot_proxy(self, method: str, path: str, query: dict, body: bytes | None,
+                        timeout: float = 45) -> tuple[int, dict]:
+        """Forward a dashboard request to the bot; returns (HTTP status, JSON)."""
+        if not self.running:
+            return 503, {"error": "The bot isn't running, so server settings can't be read right now."}
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as s:
+                async with s.request(method, f"http://127.0.0.1:{self.api_port}{path}", params=query, data=body,
+                                     headers={"X-Token": self.api_token, "Content-Type": "application/json"}) as r:
+                    try:
+                        data = await r.json(content_type=None)
+                    except ValueError:
+                        data = {"error": (await r.text())[:300] or f"HTTP {r.status}"}
+                    return r.status, data if isinstance(data, dict) else {"data": data}
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            return 503, {"error": "The bot didn't answer. It may still be connecting to Discord."}
+
     def status(self) -> dict:
         return {
             "state": self.state,

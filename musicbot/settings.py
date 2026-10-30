@@ -29,6 +29,10 @@ DEFAULTS: dict = {
     "auto_restart": True,        # panel restarts the bot if it crashes
     "update_ytdlp_on_start": True,
     "ffmpeg_path": "ffmpeg",
+    # Discord sign-in for the dashboard (server admins manage their own servers)
+    "public_url": "",            # e.g. https://music.example.com, where people open the panel
+    "oauth_client_secret": "",   # Developer Portal → OAuth2 → Client Secret
+    "application_id": "",        # filled in by itself from the running bot
 }
 
 # env var -> settings key
@@ -37,6 +41,8 @@ ENV_OVERRIDES = {
     "SPOTIFY_CLIENT_ID": "spotify_client_id",
     "SPOTIFY_CLIENT_SECRET": "spotify_client_secret",
     "FFMPEG_PATH": "ffmpeg_path",
+    "PUBLIC_URL": "public_url",
+    "OAUTH_CLIENT_SECRET": "oauth_client_secret",
 }
 
 _lock = threading.Lock()

@@ -5,7 +5,7 @@
 :root[data-theme="light"]{--backdrop:url("sakura-light.svg")}
 :root[data-theme="dark"]{--backdrop:url("sakura-dark.svg")}
 
-.stack{display:grid;gap:var(--sp-5)}
+.stack{display:grid;gap:var(--sp-5);grid-template-columns:minmax(0,1fr)}  /* a wide table scrolls in its box, not the page */
 .page-intro{margin-bottom:var(--sp-5)}
 .screen[hidden]{display:none!important}
 

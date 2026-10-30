@@ -8,3 +8,5 @@ aiohttp>=3.9
 ytmusicapi>=1.10
 # Audio check that a re-uploaded song is the same recording as the Spotify track.
 numpy>=1.26
+# The per-server settings, reaction-role menus and moderation cases live in SQLite.
+aiosqlite>=0.20

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from aiohttp import web
 
+from . import dashboard
 from .player import LoopMode
 
 if TYPE_CHECKING:
@@ -55,6 +56,7 @@ async def start(bot: "MusicBot") -> ControlApi | None:
             "latency_ms": round(bot.latency * 1000) if bot.is_ready() and bot.latency == bot.latency else None,
             "started": STARTED,
             "players": [p.snapshot() for p in bot.players.values()],
+            "intents": {"members": bot.intents.members, "message_content": bot.intents.message_content},
         })
 
     async def control(request: web.Request):
@@ -98,6 +100,7 @@ async def start(bot: "MusicBot") -> ControlApi | None:
     app = web.Application(middlewares=[auth])
     app.router.add_get("/state", state)
     app.router.add_post("/control", control)
+    app.router.add_routes(dashboard.routes(bot))
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     await web.TCPSite(runner, "127.0.0.1", int(port)).start()

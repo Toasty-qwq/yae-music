@@ -89,6 +89,7 @@ channel (change this in Settings).
 
 ## The control panel
 
+- **Servers**: each server's welcome, role, moderation and logging settings (see the next section).
 - **Overview**: bot status, ping, server count, invite link, and every server that's playing,
   with pause/skip/stop/shuffle/loop/volume and queue removal.
 - **Logs**: a live log with filtering and download. `docker logs musicbot` and CasaOS's own log
@@ -99,6 +100,43 @@ channel (change this in Settings).
 
 Forgot the panel password? Set `PANEL_PASSWORD` in `docker-compose.yml` (or as an environment
 variable before `start.bat`). While it is set, it replaces the saved password.
+
+## Server features: welcome, roles, moderation, logs
+
+Besides music, the bot does what Carl-bot does for a server. Every setting is per server, on the
+panel's **Servers** page:
+
+| Tab | What it does |
+|---|---|
+| Welcome | Welcome and farewell messages (text or embed, with `{user}`, `{server}`, `{membercount}` and more), an optional welcome DM, and **autorole** (roles every new member or bot gets) |
+| Roles | **Reaction-role menus**: a message with buttons, a dropdown, or emoji reactions that members click to give themselves roles. Modes: toggle, one-at-a-time, or get-only |
+| Moderation | `/ban` (also temporary: `1d`, `2w`), `/unban`, `/kick`, `/timeout`, `/untimeout`, `/warn`, `/warnings`, `/case`, `/reason`, `/purge`. Every action is a numbered case, listed on the dashboard and posted to a mod-log channel |
+| Logging | Deleted and edited messages, joins and leaves, nickname and role changes, bans, kicks and timeouts (also ones done by hand), voice joins and moves, channel and role changes, each to its own channel |
+
+**One-time setup in the Discord Developer Portal** (<https://discord.com/developers/applications> → your bot):
+
+1. **Bot** → **Privileged Gateway Intents** → turn on **Server Members Intent** and
+   **Message Content Intent**, then **Save**. Without them the bot still plays music, but welcome
+   messages, autorole and the logs stay off (the panel says so).
+2. **Re-invite the bot** with the invite button on the panel's Overview. The new link asks for the
+   extra permissions (Manage Roles, Kick, Ban, Timeout, Manage Messages, View Audit Log). Opening
+   it for a server the bot is already in just updates its permissions.
+3. In each server: **Server Settings → Roles**, drag the bot's role **above** every role it
+   should hand out. Discord only lets a bot give roles below its own.
+
+**Letting server admins sign in with Discord** (optional; without it only you, with the panel
+password, can change server settings):
+
+1. The panel must be reachable from the internet at an https address, such as through a
+   Cloudflare tunnel.
+2. Panel → **Settings** → **Discord sign-in**: type that address and save. The panel then shows
+   a redirect URL.
+3. Developer Portal → **OAuth2** → **Redirects** → add that URL. Copy the **Client Secret** from the
+   same page into the panel and save.
+
+The sign-in page then shows **Sign in with Discord**. People who sign in see only the servers
+where they have the Manage Server permission. The bot checks that on Discord on every change, and
+they never see the bot's token, logs or music controls.
 
 ## How Spotify works
 
