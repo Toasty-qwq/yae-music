@@ -13,7 +13,10 @@ from typing import TYPE_CHECKING
 
 from aiohttp import web
 
+import discord
+
 from . import dashboard
+from .errors import ConfigError
 from .player import LoopMode
 
 if TYPE_CHECKING:
@@ -101,6 +104,21 @@ async def start(bot: "MusicBot") -> ControlApi | None:
     app.router.add_get("/state", state)
     app.router.add_post("/control", control)
     app.router.add_routes(dashboard.routes(bot))
+
+    async def profile_get(_):
+        try:
+            return web.json_response(await bot.get_cog("Profile").read())
+        except discord.HTTPException as e:
+            return web.json_response({"ok": False, "error": f"Discord didn't answer: {e.text or e}"}, status=502)
+
+    async def profile_post(request: web.Request):
+        try:
+            done = await bot.get_cog("Profile").update(await request.json())
+        except ConfigError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return web.json_response({"ok": True, "done": done, **await bot.get_cog("Profile").read()})
+    app.router.add_get("/profile", profile_get)
+    app.router.add_post("/profile", profile_post)
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     await web.TCPSite(runner, "127.0.0.1", int(port)).start()

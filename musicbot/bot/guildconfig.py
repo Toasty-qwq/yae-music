@@ -24,6 +24,10 @@ FAREWELL_DEFAULT = messages.message(
     thumbnail="{user.avatar}")
 DM_DEFAULT = messages.message("Welcome to {server}, {user.name}. Glad you're here.")
 MATCHES = ("contains", "word", "exact", "starts")
+VM_FEATURES = ("name", "limit", "status", "lock", "claim", "reject", "permit", "ghost", "lfm", "text",
+               "bitrate", "invite", "transfer", "nsfw", "region")
+VM_MODES = ("default", "sequence", "predefined", "clone", "dynamic")
+VM_TEXT_MESSAGE = messages.message("This is {user}'s channel. It goes away when the voice channel does.")
 FORUM_MESSAGE = messages.message("Congratulations {user}, your post was accepted!")
 FORUM_DM = messages.message("Your post in {server} was accepted, and you've been given a new role.")
 
@@ -44,9 +48,22 @@ DEFAULTS: dict = {
                   "self_star": False, "ignored_channel_ids": []},
     "suggestions": {"enabled": False, "channel_id": None, "anonymous": False, "dm_on_decision": True},
     "forumroles": {"enabled": False, "log_channel_id": None, "rules": []},
+    "voicemaster": {
+        "enabled": False, "setups": [],
+        "features": {f: True for f in VM_FEATURES},
+        "owner_manage_channel": False, "owner_move_members": False,
+        "interface": True, "interface_ping": False,
+        "log_channel_id": None, "lfm_channel_id": None,
+        "temp_role_id": None, "auto_text": False, "text_access_role_id": None, "text_message": VM_TEXT_MESSAGE,
+    },
+    "tickets": {
+        "log_channel_id": None, "transcript_channel_id": None,
+        "two_step_close": True, "keep_closed": True, "save_transcript": True, "dm_transcript": False,
+        "claiming": True, "auto_close_hours": 0, "close_when_owner_leaves": True, "global_limit": 0,
+    },
 }
 SECTIONS = tuple(DEFAULTS)
-MESSAGE_KEYS = {"message", "dm"}  # whole message dicts: replaced, never merged key by key
+MESSAGE_KEYS = {"message", "dm", "text_message"}  # whole message dicts: replaced, never merged key by key
 
 
 def _legacy(section: str, v: dict) -> dict:
@@ -279,6 +296,104 @@ def _logging(guild, d):
     }
 
 
+def _int(d, key, default, lo, hi, label):
+    try:
+        v = int(d.get(key, default) if d.get(key, default) not in (None, "") else default)
+    except (TypeError, ValueError):
+        raise ConfigError(f"{label} must be a whole number.") from None
+    if not lo <= v <= hi:
+        raise ConfigError(f"{label} must be between {lo} and {hi}.")
+    return v
+
+
+def _category(guild, value, label, *, required=False):
+    if value in (None, "", 0, "0"):
+        if required:
+            raise ConfigError(f"Pick a category for {label}.")
+        return None
+    try:
+        cat = guild.get_channel(int(value))
+    except (TypeError, ValueError):
+        cat = None
+    if not isinstance(cat, discord.CategoryChannel):
+        raise ConfigError(f"The category picked for {label} doesn't exist any more.")
+    p = cat.permissions_for(guild.me)
+    if not (p.manage_channels and p.view_channel):
+        raise ConfigError(f"The bot needs Manage Channels in the {cat.name} category for {label}.")
+    return cat.id
+
+
+def _optional_role(guild, value, label):
+    if value in (None, "", 0, "0"):
+        return None
+    roles = _roles(guild, [value], label)
+    return roles[0] if roles else None
+
+
+def _voicemaster(guild, d):
+    setups, seen = [], set()
+    for i, st in enumerate(d.get("setups") or [], start=1):
+        mode = st.get("mode") if st.get("mode") in VM_MODES else "default"
+        sid = str(st.get("id") or "")[:12] or f"s{i}"
+        gen = None
+        if mode != "dynamic":
+            try:
+                gen = guild.get_channel(int(st.get("channel_id") or 0))
+            except (TypeError, ValueError):
+                gen = None
+            if not isinstance(gen, discord.VoiceChannel):
+                raise ConfigError(f"Generator {i}: pick the voice channel people join to get their own.")
+            if gen.id in seen:
+                raise ConfigError(f"Generator {i}: that voice channel is already a generator.")
+            seen.add(gen.id)
+        category = _category(guild, st.get("category_id"), f"generator {i}", required=mode == "dynamic") \
+            or (gen.category_id if gen and gen.category_id else None)
+        if category is None:
+            raise ConfigError(f"Generator {i}: pick a category for the new channels (the generator isn't in one).")
+        name = str(st.get("name") or "").strip()[:90]
+        if mode in ("sequence", "predefined", "dynamic") and not name:
+            raise ConfigError(f"Generator {i}: give the channels a name, like Gaming or {{username}}'s Room.")
+        setups.append({
+            "id": sid, "mode": mode, "channel_id": gen.id if gen else None, "category_id": category,
+            "name": name or "{username}'s channel",
+            "limit": _int(st, "limit", 0, 0, 99, f"Generator {i}'s user limit"),
+            "bitrate": _int(st, "bitrate", 64, 8, 384, f"Generator {i}'s bitrate"),
+            "editable": _bool(st, "editable", True),
+            "permissions_from": "generator" if st.get("permissions_from") == "generator" else "category",
+        })
+    if len(setups) > 10:
+        raise ConfigError("A server can have up to 10 generators.")
+    if len({s["id"] for s in setups}) != len(setups):
+        raise ConfigError("Two generators have the same id; remove one and add it again.")
+    feats = d.get("features") or {}
+    return {
+        "enabled": _bool(d, "enabled", False), "setups": setups,
+        "features": {f: bool(feats.get(f, True)) for f in VM_FEATURES},
+        "owner_manage_channel": _bool(d, "owner_manage_channel", False),
+        "owner_move_members": _bool(d, "owner_move_members", False),
+        "interface": _bool(d, "interface", True), "interface_ping": _bool(d, "interface_ping", False),
+        "log_channel_id": _channel(guild, d.get("log_channel_id"), "the VC maker's log", required=False),
+        "lfm_channel_id": _channel(guild, d.get("lfm_channel_id"), "Looking for members posts", required=False),
+        "temp_role_id": _optional_role(guild, d.get("temp_role_id"), "The channel owner role"),
+        "auto_text": _bool(d, "auto_text", False),
+        "text_access_role_id": _optional_role(guild, d.get("text_access_role_id"), "The text channel access role"),
+        "text_message": messages.validate(d.get("text_message") or VM_TEXT_MESSAGE, "The text channel message"),
+    }
+
+
+def _tickets(guild, d):
+    return {
+        "log_channel_id": _channel(guild, d.get("log_channel_id"), "the ticket log", required=False),
+        "transcript_channel_id": _channel(guild, d.get("transcript_channel_id"), "transcripts", required=False),
+        "two_step_close": _bool(d, "two_step_close", True), "keep_closed": _bool(d, "keep_closed", True),
+        "save_transcript": _bool(d, "save_transcript", True), "dm_transcript": _bool(d, "dm_transcript", False),
+        "claiming": _bool(d, "claiming", True),
+        "auto_close_hours": _int(d, "auto_close_hours", 0, 0, 720, "Auto-close after"),
+        "close_when_owner_leaves": _bool(d, "close_when_owner_leaves", True),
+        "global_limit": _int(d, "global_limit", 0, 0, 50, "Open tickets per person"),
+    }
+
+
 def _forumroles(guild, d):
     rules, seen = [], set()
     for i, r in enumerate(d.get("rules") or [], start=1):
@@ -331,4 +446,5 @@ def _forumroles(guild, d):
 
 VALIDATORS = {"welcome": _welcome, "farewell": _farewell, "autorole": _autorole,
               "moderation": _moderation, "logging": _logging, "autoresponders": _autoresponders,
-              "starboard": _starboard, "suggestions": _suggestions, "forumroles": _forumroles}
+              "starboard": _starboard, "suggestions": _suggestions, "forumroles": _forumroles,
+              "voicemaster": _voicemaster, "tickets": _tickets}

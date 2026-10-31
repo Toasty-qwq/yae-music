@@ -104,6 +104,48 @@ CREATE TABLE IF NOT EXISTS forum_grants (  -- forum posts whose tag already gave
     granted_at REAL NOT NULL,
     PRIMARY KEY (guild_id, thread_id, tag_id)
 );
+CREATE TABLE IF NOT EXISTS vm_channels (   -- temporary voice channels made by the VC maker
+    channel_id      INTEGER PRIMARY KEY,
+    guild_id        INTEGER NOT NULL,
+    owner_id        INTEGER,
+    setup_id        TEXT NOT NULL,
+    text_channel_id INTEGER,
+    created_at      REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS vm_profiles (   -- someone's saved channel settings, used on every server
+    user_id INTEGER PRIMARY KEY,
+    data    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ticket_panels (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER,
+    data       TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tickets (
+    guild_id      INTEGER NOT NULL,
+    number        INTEGER NOT NULL,
+    channel_id    INTEGER NOT NULL UNIQUE,
+    owner_id      INTEGER NOT NULL,
+    panel_id      INTEGER,
+    type_id       TEXT,
+    type_label    TEXT,
+    status        TEXT NOT NULL DEFAULT 'open',  -- open | closed | deleted
+    claimed_by    INTEGER,
+    answers       TEXT,
+    created_at    REAL NOT NULL,
+    closed_at     REAL,
+    close_reason  TEXT,
+    last_activity REAL NOT NULL,
+    PRIMARY KEY (guild_id, number)
+);
+CREATE INDEX IF NOT EXISTS tickets_owner ON tickets(guild_id, owner_id, status);
+CREATE TABLE IF NOT EXISTS bot_state (     -- small things the bot keeps, like its presence
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS member_roles (  -- roles to give back when someone rejoins
     guild_id INTEGER NOT NULL,
     user_id  INTEGER NOT NULL,

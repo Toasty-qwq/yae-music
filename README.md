@@ -90,6 +90,8 @@ channel (change this in Settings).
 ## The control panel
 
 - **Servers**: each server's welcome, role, moderation and logging settings (see the next section).
+- **Bot profile**: the bot's picture, banner, username, About me, online status and activity
+  ("Listening to /play"), with a preview. Discord allows two username changes an hour.
 - **Overview**: bot status, ping, server count, invite link, and every server that's playing,
   with pause/skip/stop/shuffle/loop/volume and queue removal.
 - **Logs**: a live log with filtering and download. `docker logs musicbot` and CasaOS's own log
@@ -118,6 +120,17 @@ panel's **Servers** page:
 | Suggestions | `/suggest` posts numbered ideas with vote reactions; `/suggestion approve/deny/consider/implemented` decides them |
 | Moderation | `/ban` (also temporary: `1d`, `2w`), `/unban`, `/kick`, `/timeout`, `/untimeout`, `/warn`, `/warnings`, `/case`, `/reason`, `/purge`. Every action is a numbered case, listed on the dashboard and posted to a mod-log channel |
 | Logging | Deleted and edited messages, joins and leaves, nickname and role changes, bans, kicks and timeouts (also ones done by hand), voice joins and moves, channel and role changes, each to its own channel |
+| VC maker → Generators | "Join to create" voice channels (like VoiceMaster). Each generator has its own category, name pattern (`{username}'s room`, numbered, random animal/colour/tree), user limit and bitrate. Modes: a room per person, numbered rooms, a fixed list of names, a copy of the generator, or **dynamic** (always one empty room waiting). Rooms delete themselves when empty |
+| VC maker → Controls | Which room controls owners get: rename, limit, lock, hide (ghost), permit/reject people, claim an abandoned room, status, "looking for members" posts, text chat, bitrate, invite, transfer, age-restrict, region. Also the control-panel message posted in each room, and whether owners get Manage Channel / Move Members |
+| VC maker → Extras | A temporary role for people in rooms, a text channel per room (with a message you build), a log channel, and the "looking for members" channel. Owners can `/voice save` their room settings and `/voice load` them next time |
+| Tickets → Panels | Ticket panels: one message with buttons or a dropdown, each a **ticket type** ("Support", "Apply to be mod", ...) with its own category or private thread, support roles, name pattern, opening message, up to 5 form questions, and a per-person limit. Edit a panel after posting and the message updates in place |
+| Tickets → Tickets | Every open and closed ticket: who opened it, type, who claimed it, answers |
+| Tickets → Settings | Log and transcript channels, ask-before-closing, keep closed tickets (reopen later) or delete them, HTML transcripts (also by DM), claiming, auto-close after inactivity, close when the owner leaves |
+
+Room owners use `/voice` (`name`, `limit`, `lock`, `unlock`, `ghost`, `unghost`, `permit`,
+`reject`, `claim`, `transfer`, `status`, `lfm`, `text`, `bitrate`, `invite`, `nsfw`, `region`,
+`save`, `load`) or the buttons in their room. Tickets have `/ticket` (`close`, `closerequest`,
+`reopen`, `delete`, `claim`, `add`, `remove`, `rename`, `transcript`).
 
 Also for everyone: `/remind`, `/reminders`, `/userinfo`, `/serverinfo`, `/avatar`, and `/say` for
 moderators. The panel's **Commands** page lists every command with what it does and who can use it.
@@ -136,8 +149,10 @@ style too: `{user}`, `{mention}`, `{user.name}` or `{user(name)}`, `{user.avatar
    **Message Content Intent**, then **Save**. Without them the bot still plays music, but welcome
    messages, autorole and the logs stay off (the panel says so).
 2. **Re-invite the bot** with the invite button on the panel's Overview. The new link asks for the
-   extra permissions (Manage Roles, Kick, Ban, Timeout, Manage Messages, View Audit Log). Opening
-   it for a server the bot is already in just updates its permissions.
+   extra permissions (Manage Roles, Kick, Ban, Timeout, Manage Messages, View Audit Log, Manage
+   Channels, Move Members, Set Voice Channel Status, Manage Threads, Create Private Threads, Send
+   Messages in Threads, Use External Emojis). Opening it for a server the bot is already in just
+   updates its permissions.
 3. In each server: **Server Settings → Roles**, drag the bot's role **above** every role it
    should hand out. Discord only lets a bot give roles below its own.
 

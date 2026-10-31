@@ -13,6 +13,12 @@ const TABS = [
   {id: "suggestions", kanji: "案", label: "Suggestions", group: "Community"},
   {id: "moderation", kanji: "守", label: "Moderation", group: "Safety"},
   {id: "logging", kanji: "記", label: "Logging", group: "Safety"},
+  {id: "vc-generators", kanji: "室", label: "Generators", group: "VC maker"},
+  {id: "vc-controls", kanji: "鍵", label: "Controls", group: "VC maker"},
+  {id: "vc-extras", kanji: "添", label: "Extras", group: "VC maker"},
+  {id: "tk-panels", kanji: "票", label: "Panels", group: "Tickets"},
+  {id: "tk-list", kanji: "帳", label: "Tickets", group: "Tickets"},
+  {id: "tk-settings", kanji: "規", label: "Settings", group: "Tickets"},
 ];
 const LOGS = [
   ["messages", "Messages", "Deleted, edited and bulk-deleted messages."],
@@ -88,8 +94,9 @@ function sample(text, isUrl = false) {
     "user": "@" + (me.name || "NewMember"), "mention": "@" + (me.name || "NewMember"), "user.mention": "@" + (me.name || "NewMember"),
     "user.name": me.name || "newmember", "user.display": me.name || "New Member", "user.nick": me.name || "New Member",
     "user.id": me.id || "123456789012345678", "user.avatar": me.avatar || "/ds/icon.png", "user.icon": me.avatar || "/ds/icon.png",
-    "user.created": "2 years ago", "server": G.guild.name, "server.name": G.guild.name, "server.icon": G.guild.icon || "",
-    "server.id": G.guild.id, "membercount": String(G.guild.members ?? 0), "server.members": String(G.guild.members ?? 0), "channel": "#welcome",
+    "user.created": "2 years ago", "server": G ? G.guild.name : "Your server", "server.name": G ? G.guild.name : "Your server",
+    "server.icon": (G && G.guild.icon) || "", "server.id": G ? G.guild.id : "", "channel": "#welcome",
+    "membercount": String(G ? G.guild.members ?? 0 : 0), "server.members": String(G ? G.guild.members ?? 0 : 0),
   };
   return (text || "").replace(/\{(user|mention|server|membercount|channel)(?:[.(]([a-z_]+)\)?)?\}/gi, (m, k, a) => {
     const key = (k + (a ? "." + a : "")).toLowerCase().replace("(", ".");
@@ -256,7 +263,8 @@ function showGuild() {
   const missing = G.missing.length ? `<div class="note warn" style="margin-bottom:18px"><b>The bot is missing ${G.missing.length === 1 ? "a permission" : "some permissions"}</b>${G.missing.map(m => `${esc(m.perm.replace(/_/g, " "))} (for ${esc(m.for)})`).join(" · ")}. Give its role these in Server Settings → Roles → ${esc(G.bot_role)}.</div>` : "";
   const groups = [...new Set(TABS.map(t => t.group))];
   const count = {roles: G.menus.length, messages: G.posts.length, tags: G.tags.length, replies: G.config.autoresponders.items.length,
-                 forum: G.config.forumroles.rules.length};
+                 forum: G.config.forumroles.rules.length, "vc-generators": G.config.voicemaster.setups.length,
+                 "tk-panels": (G.ticket_panels || []).length};
   root().innerHTML = `
     <header class="fleet-head page-intro"><div class="fh-words">
       <p class="eyebrow"><a href="#servers">All servers</a> · <b>${esc(g.id)}</b></p>
@@ -271,7 +279,9 @@ function showGuild() {
     <div id="tab-body"></div>`;
   root().querySelectorAll(".slipbtn").forEach(b => b.onclick = () => { location.hash = `#servers/${g.id}/${b.dataset.tab}`; });
   ({welcome: tabWelcome, roles: tabRoles, forum: tabForum, messages: tabMessages, tags: tabTags, replies: tabReplies,
-    starboard: tabStarboard, suggestions: tabSuggestions, moderation: tabModeration, logging: tabLogging})[tab]();
+    starboard: tabStarboard, suggestions: tabSuggestions, moderation: tabModeration, logging: tabLogging,
+    "vc-generators": tabVcGenerators, "vc-controls": tabVcControls, "vc-extras": tabVcExtras,
+    "tk-panels": tabTkPanels, "tk-list": tabTkList, "tk-settings": tabTkSettings})[tab]();
 }
 
 /* ---------- Welcome ---------- */
@@ -689,6 +699,367 @@ function tabLogging() {
     channels: Object.fromEntries(LOGS.map(([k]) => [k, val("l-" + k) || null]))}, "Events are logged where you picked.");
 }
 
+/* ---------- shared pickers for the VC maker and tickets ---------- */
+const optList = (items, value, none) => (none !== undefined ? `<option value="">${esc(none)}</option>` : "") +
+  items.map(x => `<option value="${x.id}" ${x.id === value ? "selected" : ""}>${esc(x.label)}</option>`).join("");
+const categorySelect = (id, value, none = "Pick a category") =>
+  `<select id="${id}">${optList(G.categories.map(c => ({id: c.id, label: c.name})), value, none)}</select>`;
+const voiceSelect = (id, value, none = "Pick a voice channel") =>
+  `<select id="${id}">${optList(G.voice_channels.map(c => ({id: c.id, label: (c.category ? c.category + " / " : "") + c.name})), value, none)}</select>`;
+const roleSelect = (id, value, none = "No role", assignableOnly = true) =>
+  `<select id="${id}">${optList(G.roles.filter(r => !assignableOnly || !r.problem).map(r => ({id: r.id, label: "@" + r.name})), value, none)}</select>`;
+const textSelect = (id, value, none = "Pick a channel") =>
+  `<select id="${id}">${optList(G.channels.map(c => ({id: c.id, label: "#" + c.name})), value, none)}</select>`;
+const segHTML = (name, value, opts) => `<div class="seg" role="group" data-seg="${name}">${Object.entries(opts).map(([k, v]) =>
+  `<button type="button" data-v="${k}" aria-pressed="${k === value}">${esc(v)}</button>`).join("")}</div>`;
+const wireSegs = (scope, onPick) => scope.querySelectorAll("[data-seg] button").forEach(b => b.onclick = () => {
+  b.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  onPick && onPick(b.parentElement.dataset.seg, b.dataset.v);
+});
+const segVal = (scope, name) => (scope.querySelector(`[data-seg="${name}"] button[aria-pressed="true"]`) || {}).dataset?.v;
+const saveVM = (changes, okText) => saveSection("voicemaster", {...JSON.parse(JSON.stringify(G.config.voicemaster)), ...changes}, okText);
+
+/* ---------- VC maker: generators ---------- */
+const VM_MODES = {
+  default: ["Their own", "The member picks the name and limit; saved settings are used"],
+  sequence: ["Numbered", "Gaming 1, Gaming 2... with a fixed limit"],
+  predefined: ["Template", "A name pattern: {username}, {seq}, {animal}, {color}, {tree}"],
+  clone: ["Copy the generator", "Same name, limit and bitrate as the generator"],
+  dynamic: ["Always one ready", "No generator: one empty room is always waiting in the category"],
+};
+function tabVcGenerators() {
+  const cfg = G.config.voicemaster;
+  if (!editing) editing = {setups: JSON.parse(JSON.stringify(cfg.setups))};
+  const setups = editing.setups;
+  const live = G.temp_channels || [];
+  body().innerHTML = `<p class="lede" style="margin-bottom:16px">A generator is a voice channel people join to get their own temporary channel, moved in automatically and deleted when everyone leaves. The owner controls it with the panel in its chat or with <code>/voice</code>.</p>
+    <section class="panel"><header><h3>Generators</h3><span class="sp">${setups.length}/10</span></header><div class="pad">
+      <div class="switches" style="margin-bottom:16px">${sw("vm-enabled", "Make temporary voice channels", cfg.enabled)}</div>
+      ${setups.map((s, i) => `<details class="ar-item" ${s._open ? "open" : ""} data-i="${i}"><summary><b>${esc(VM_MODES[s.mode][0])}</b> <span class="muted">${s.mode === "dynamic" ? "" : esc((G.voice_channels.find(v => v.id === s.channel_id) || {name: "pick a channel"}).name)} · ${esc(s.name || "")}</span></summary>
+        <div class="field" style="margin-top:12px"><label>Kind</label>${segHTML("mode" + i, s.mode, Object.fromEntries(Object.entries(VM_MODES).map(([k, v]) => [k, v[0]])))}<div class="help">${esc(VM_MODES[s.mode][1])}</div></div>
+        <div class="b-row2">${s.mode === "dynamic" ? "" : field(`vg-ch-${i}`, "Generator (people join this)", voiceSelect(`vg-ch-${i}`, s.channel_id))}
+          ${field(`vg-cat-${i}`, "New channels go in", categorySelect(`vg-cat-${i}`, s.category_id, s.mode === "dynamic" ? "Pick a category" : "The generator's category"))}</div>
+        <div class="b-row3">${field(`vg-name-${i}`, "Name", `<input id="vg-name-${i}" value="${esc(s.name || "")}" maxlength="90" placeholder="{username}'s channel">`, s.mode === "default" ? "Used until the member saves their own." : s.mode === "clone" ? "Not used: the generator's name is copied." : "")}
+          ${field(`vg-limit-${i}`, "User limit (0 = none)", `<input type="number" id="vg-limit-${i}" min="0" max="99" value="${s.limit ?? 0}">`)}
+          ${field(`vg-br-${i}`, `Bitrate, kbps (max ${G.bitrate_limit})`, `<input type="number" id="vg-br-${i}" min="8" max="${G.bitrate_limit}" value="${s.bitrate ?? 64}">`)}</div>
+        <div class="field"><label>Permissions come from</label>${segHTML("perm" + i, s.permissions_from || "category", {category: "The category", generator: "The generator channel"})}</div>
+        <div class="switches" style="margin-bottom:12px">${sw(`vg-ed-${i}`, "Owners can change the name and limit", s.editable !== false)}</div>
+        <div class="btnrow">${btn(`vg-del-${i}`, "Remove this generator", "sm ghost")}</div></details>`).join("")}
+      ${setups.length ? "" : `<p class="muted">No generators yet.</p>`}
+      <div class="btnrow" style="margin-top:14px">${btn("vg-add", "Add a generator", "", "plus")}${btn("vg-save", "Save", "primary", "save")}</div>
+    </div></section>
+    <section class="panel" style="margin-top:24px"><header><h3>Live channels</h3><span class="sp">${live.length}</span></header><div class="pad">
+      ${live.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Channel</th><th>Owner</th><th class="num">People</th></tr></thead><tbody>${live.map(c =>
+        `<tr><td>${esc(c.name)}</td><td class="mono">${c.owner_id ? esc(c.owner_id) : "<span class=muted>nobody (ready room)</span>"}</td><td class="num">${c.members}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="muted">No temporary channels right now.</p>`}</div></section>`;
+  const grab = () => setups.forEach((s, i) => {
+    s.mode = segVal(body(), "mode" + i) || s.mode;
+    if ($(`#vg-ch-${i}`)) s.channel_id = val(`vg-ch-${i}`);
+    s.category_id = val(`vg-cat-${i}`); s.name = val(`vg-name-${i}`); s.limit = +val(`vg-limit-${i}`) || 0;
+    s.bitrate = +val(`vg-br-${i}`) || 64; s.editable = on(`vg-ed-${i}`);
+    s.permissions_from = segVal(body(), "perm" + i) || "category"; s._open = $(`details[data-i="${i}"]`).open;
+  });
+  wireSegs(body(), seg => { if (seg.startsWith("mode")) { grab(); tabVcGenerators(); } });
+  setups.forEach((s, i) => $(`#vg-del-${i}`).onclick = () => { grab(); setups.splice(i, 1); tabVcGenerators(); });
+  $("#vg-add").onclick = () => {
+    grab();
+    setups.push({id: "s" + Math.random().toString(36).slice(2, 8), mode: "default", channel_id: "", category_id: "", name: "{username}'s channel",
+                 limit: 0, bitrate: 64, editable: true, permissions_from: "category", _open: true});
+    tabVcGenerators();
+  };
+  $("#vg-save").onclick = async () => {
+    grab();
+    if (await saveVM({enabled: on("vm-enabled"), setups: setups.map(({_open, ...x}) => x)}, "Joining a generator makes a channel from now on.")) {
+      editing = null; showGuild();
+    }
+  };
+}
+
+/* ---------- VC maker: controls ---------- */
+const VM_FEATURES = [["name", "Rename"], ["limit", "User limit"], ["status", "Channel status"], ["lock", "Lock and unlock"],
+  ["claim", "Claim"], ["reject", "Reject people"], ["permit", "Permit people"], ["ghost", "Hide and show"], ["lfm", "Looking for members"],
+  ["text", "Text channel"], ["bitrate", "Bitrate"], ["invite", "Invite by DM"], ["transfer", "Transfer"], ["nsfw", "Age-restricted"], ["region", "Region"]];
+function tabVcControls() {
+  const c = G.config.voicemaster;
+  body().innerHTML = `<div class="grid g2">
+    <section class="panel"><header><h3>What owners can do</h3></header><div class="pad">
+      <p>Switch off anything members shouldn't change. People with Manage Channels can always use everything.</p>
+      <div class="switches" style="grid-template-columns:repeat(2,minmax(0,1fr));display:grid">${VM_FEATURES.map(([k, l]) => sw("vf-" + k, l, c.features[k] !== false)).join("")}</div>
+      <hr><div class="switches">${sw("vf-manage", "Also give owners Discord's Manage Channel on their channel", c.owner_manage_channel)}${sw("vf-move", "Also let owners move and disconnect people in it", c.owner_move_members)}</div>
+    </div></section>
+    <section class="panel"><header><h3>The control panel</h3></header><div class="pad">
+      <p>Every new channel gets a message in its chat with two menus, Channel settings and Channel permissions, plus Load my settings. Members can also use <code>/voice</code>.</p>
+      <div class="switches" style="margin-bottom:16px">${sw("vf-iface", "Post the control panel in each new channel", c.interface)}${sw("vf-ping", "Ping the owner with it", c.interface_ping)}</div>
+      <p class="help"><code>/voice panel</code> (Manage Channels) posts the same panel in any channel, where it works on whatever temporary channel the person is in.</p>
+    </div></section></div>
+    <div class="form-foot btnrow">${btn("vf-save", "Save", "primary", "save")}</div>`;
+  $("#vf-save").onclick = () => saveVM({features: Object.fromEntries(VM_FEATURES.map(([k]) => [k, on("vf-" + k)])),
+    owner_manage_channel: on("vf-manage"), owner_move_members: on("vf-move"), interface: on("vf-iface"), interface_ping: on("vf-ping")},
+    "Owners get these controls from now on.");
+}
+
+/* ---------- VC maker: extras ---------- */
+function tabVcExtras() {
+  const c = G.config.voicemaster;
+  body().innerHTML = `<div class="grid g2">
+    <section class="panel"><header><h3>Channels and roles</h3></header><div class="pad">
+      ${field("vx-log", "Log channel", channelSelect("vx-log", c.log_channel_id, "No log"), "Channels made, claimed and handed over.")}
+      ${field("vx-lfm", "Looking for members channel", channelSelect("vx-lfm", c.lfm_channel_id, "Off"), "Where Looking for members posts go, with a join link.")}
+      ${field("vx-role", "Owner role", roleSelect("vx-role", c.temp_role_id), "Given to people while they own a temporary channel, and taken back when they leave it.")}
+    </div></section>
+    <section class="panel"><header><h3>Text channels</h3></header><div class="pad">
+      <div class="switches" style="margin-bottom:12px">${sw("vx-auto", "Give every new voice channel its own text channel", c.auto_text)}</div>
+      ${field("vx-access", "Role that can also see those text channels", roleSelect("vx-access", c.text_access_role_id, "Nobody else", false), "Moderators, for example. The people in the voice channel always can.")}
+    </div></section></div>
+    <section class="panel" style="margin-top:24px"><header><h3>First message in each text channel</h3></header><div class="pad">
+      ${builderHost("vmtext", JSON.parse(JSON.stringify(c.text_message)), {contentLabel: "Message"})}
+    </div></section>
+    <div class="form-foot btnrow">${btn("vx-save", "Save", "primary", "save")}</div>`;
+  wireBuilder("vmtext");
+  $("#vx-save").onclick = () => saveVM({log_channel_id: val("vx-log") || null, lfm_channel_id: val("vx-lfm") || null,
+    temp_role_id: val("vx-role") || null, auto_text: on("vx-auto"), text_access_role_id: val("vx-access") || null,
+    text_message: readBuilder("vmtext")}, "Saved.");
+}
+
+/* ---------- Tickets: panels ---------- */
+const BTN_COLORS = {primary: "Blurple", secondary: "Grey", success: "Green", danger: "Red"};
+const newType = () => ({id: "", label: "Support", emoji: "", description: "", color: "primary", mode: "channel", category_id: "",
+  thread_channel_id: "", closed_category_id: "", support_role_ids: [], name_template: "{type}-{number}", limit_per_user: 1, ping_support: true,
+  questions: [], ticket_message: {content: "", embed: {...JSON.parse(JSON.stringify(EMPTY_EMBED)), enabled: true, title: "Thanks for reaching out, {user.display}",
+    description: "Tell us what you need and someone from the team will be with you soon.\nPress **Close** when you're done."}}, _open: true});
+function tabTkPanels() {
+  if (editing) return panelEditor();
+  const ch = id => (G.channels.find(c => c.id === id) || {name: "deleted-channel"}).name;
+  const panels = G.ticket_panels || [];
+  body().innerHTML = `<p class="lede" style="margin-bottom:16px">A panel is a message with a button (or dropdown option) for each kind of ticket: Support, Apply to be mod, Report someone... Edit it any time, add or remove kinds, and the posted message updates itself.</p>
+    <div class="btnrow" style="margin-bottom:18px">${btn("tp-new", "New panel", "primary", "plus")}</div>` + (panels.length
+    ? `<div class="grid gauto">${panels.map(p => `<div class="card"><header><h3>${esc(p.data.name)}</h3><span class="k">#${esc(ch(p.channel_id))}</span></header>
+        <p class="card-sub">${p.data.types.map(t => esc(t.label)).join(" · ")}</p><p class="muted mono" style="font-size:11px">Panel ${p.id}</p>
+        <div class="btnrow">${btn("tp-edit-" + p.id, "Edit", "sm")}${btn("tp-del-" + p.id, "Delete", "sm ghost")}</div></div>`).join("")}</div>`
+    : emptyState("placeblock", "No ticket panels yet", "Make one, add the kinds of tickets people can open, and post it."));
+  $("#tp-new").onclick = () => {
+    editing = {name: "Tickets", channel_id: "", style: "buttons", placeholder: "Pick what it's about",
+      message: {content: "", embed: {...JSON.parse(JSON.stringify(EMPTY_EMBED)), enabled: true, title: "Need help?", description: "Pick what it's about below to open a private ticket with the team."}},
+      types: [newType()]};
+    panelEditor();
+  };
+  panels.forEach(p => {
+    $("#tp-edit-" + p.id).onclick = () => { editing = {...JSON.parse(JSON.stringify(p.data)), id: p.id, channel_id: p.channel_id}; panelEditor(); };
+    $("#tp-del-" + p.id).onclick = async () => {
+      if (!confirm(`Delete the "${p.data.name}" panel? Its message is removed. Open tickets stay.`)) return;
+      try { await api(`/api/dash/guild/${G.guild.id}/ticketpanels/${p.id}`, {method: "DELETE"}); G.ticket_panels = panels.filter(x => x.id !== p.id); toast("ok", "Panel deleted", ""); showGuild(); }
+      catch (e) { toast("bad", "Not deleted", e.message); }
+    };
+  });
+}
+function panelEditor() {
+  const p = editing;
+  const qRow = (ti, q, qi) => `<div class="b-fieldrow" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) 80px auto auto auto" data-q="${ti}-${qi}">
+      <input class="inp" data-qf="label" maxlength="45" value="${esc(q.label)}" placeholder="Question">
+      <input class="inp" data-qf="placeholder" maxlength="100" value="${esc(q.placeholder || "")}" placeholder="Hint (optional)">
+      <input class="inp" type="number" data-qf="max" min="1" max="4000" value="${q.max || 1000}" title="Longest answer">
+      <label class="switch"><input type="checkbox" data-qf="required" ${q.required !== false ? "checked" : ""}><span class="track"></span>Needed</label>
+      <label class="switch"><input type="checkbox" data-qf="long" ${q.long ? "checked" : ""}><span class="track"></span>Long</label>
+      <button class="btn icon xs ghost" type="button" data-rmq="${ti}-${qi}" aria-label="Remove this question">${svg("x")}</button></div>`;
+  body().innerHTML = `<section class="panel"><header><h3>${p.id ? "Edit the panel" : "New panel"}</h3><span class="sp">${p.id ? "Panel " + p.id : "Not posted yet"}</span></header><div class="pad">
+    <div class="b-row3">${field("tp-name", "Name (only shown here)", `<input id="tp-name" value="${esc(p.name)}" maxlength="80">`)}
+      ${field("tp-channel", "Channel", channelSelect("tp-channel", p.channel_id, "Pick a channel"), "Changing it moves the panel.")}
+      <div class="field"><label>Show the kinds as</label>${segHTML("style", p.style, {buttons: "Buttons", dropdown: "A dropdown"})}</div></div>
+    ${p.style === "dropdown" ? field("tp-ph", "Dropdown hint", `<input id="tp-ph" value="${esc(p.placeholder)}" maxlength="150">`) : ""}
+    <div class="field"><label>The panel's message</label></div>
+    ${builderHost("tpmsg", p.message)}
+    <h3 class="section">Kinds of tickets <span class="muted">(${p.types.length}/25)</span></h3>
+    ${p.types.map((t, i) => `<details class="ar-item" ${t._open ? "open" : ""} data-ti="${i}"><summary><b>${esc((t.emoji ? t.emoji + " " : "") + (t.label || "New kind"))}</b> <span class="muted">${t.mode === "thread" ? "private thread" : "channel"} · ${t.questions.length} question${t.questions.length === 1 ? "" : "s"}</span></summary>
+      <div class="b-row3" style="margin-top:12px">${field(`tt-label-${i}`, "Name", `<input id="tt-label-${i}" value="${esc(t.label)}" maxlength="80" placeholder="Support">`)}
+        ${field(`tt-emoji-${i}`, "Emoji", `<input id="tt-emoji-${i}" value="${esc(t.emoji)}" maxlength="64" placeholder="Optional">`)}
+        ${p.style === "dropdown" ? field(`tt-desc-${i}`, "Description", `<input id="tt-desc-${i}" value="${esc(t.description)}" maxlength="100">`)
+          : field(`tt-color-${i}`, "Button colour", `<select id="tt-color-${i}">${Object.entries(BTN_COLORS).map(([k, v]) => `<option value="${k}" ${k === t.color ? "selected" : ""}>${v}</option>`).join("")}</select>`)}</div>
+      <div class="field"><label>Each ticket is</label>${segHTML("mode" + i, t.mode, {channel: "A private channel", thread: "A private thread"})}</div>
+      <div class="b-row2">${t.mode === "thread" ? field(`tt-th-${i}`, "Threads are made in", textSelect(`tt-th-${i}`, t.thread_channel_id))
+          : field(`tt-cat-${i}`, "New tickets go in", categorySelect(`tt-cat-${i}`, t.category_id))}
+        ${t.mode === "thread" ? "" : field(`tt-ccat-${i}`, "Closed tickets move to", categorySelect(`tt-ccat-${i}`, t.closed_category_id, "Stay where they are"))}</div>
+      <div class="field"><label>The team for these tickets</label>${roleChips("tt-roles-" + i, t.support_role_ids)}<div class="help">They see these tickets, can claim, close, reopen and delete them. People with Manage Channels always can.</div></div>
+      <div class="b-row3">${field(`tt-name-${i}`, "Ticket name", `<input id="tt-name-${i}" value="${esc(t.name_template)}" maxlength="80">`, "{type}, {number}, {user}")}
+        ${field(`tt-limit-${i}`, "Open at once, per person", `<input type="number" id="tt-limit-${i}" min="0" max="10" value="${t.limit_per_user}">`, "0 = no limit")}
+        <div class="switches" style="align-content:center">${sw(`tt-ping-${i}`, "Ping the team in new tickets", t.ping_support)}</div></div>
+      <div class="field"><label>Questions asked first (up to 5)</label>${t.questions.map((q, qi) => qRow(i, q, qi)).join("")}
+        <button class="btn sm" type="button" data-addq="${i}" ${t.questions.length >= 5 ? "disabled" : ""}><span class="p5-hl" aria-hidden="true"></span>${svg("plus")}<span>Add a question</span></button>
+        <div class="help">Asked in a pop-up before the ticket opens; the answers are posted in it.</div></div>
+      <div class="field"><label>First message in the ticket</label></div>
+      ${builderHost("tt" + i, t.ticket_message)}
+      <div class="btnrow">${btn(`tt-del-${i}`, "Remove this kind", "sm ghost")}</div></details>`).join("")}
+    <div class="btnrow">${btn("tt-add", "Add a kind of ticket", "", "plus")}</div>
+    <hr>
+    <div class="btnrow">${btn("tp-save", p.id ? "Save and update the panel" : "Post the panel", "primary", "save")}${btn("tp-cancel", "Cancel", "ghost")}</div>
+  </div></section>`;
+  wireBuilder("tpmsg");
+  p.types.forEach((t, i) => wireBuilder("tt" + i));
+  wireChips();
+  const grab = () => {
+    p.name = val("tp-name"); p.channel_id = val("tp-channel"); p.style = segVal(body(), "style") || p.style;
+    if ($("#tp-ph")) p.placeholder = val("tp-ph");
+    p.message = readBuilder("tpmsg");
+    p.types.forEach((t, i) => {
+      t.label = val(`tt-label-${i}`); t.emoji = val(`tt-emoji-${i}`);
+      if ($(`#tt-desc-${i}`)) t.description = val(`tt-desc-${i}`);
+      if ($(`#tt-color-${i}`)) t.color = val(`tt-color-${i}`);
+      t.mode = segVal(body(), "mode" + i) || t.mode;
+      if ($(`#tt-th-${i}`)) t.thread_channel_id = val(`tt-th-${i}`);
+      if ($(`#tt-cat-${i}`)) t.category_id = val(`tt-cat-${i}`);
+      if ($(`#tt-ccat-${i}`)) t.closed_category_id = val(`tt-ccat-${i}`);
+      t.support_role_ids = picked("tt-roles-" + i); t.name_template = val(`tt-name-${i}`); t.limit_per_user = +val(`tt-limit-${i}`) || 0;
+      t.ping_support = on(`tt-ping-${i}`); t.ticket_message = readBuilder("tt" + i); t._open = $(`details[data-ti="${i}"]`).open;
+      t.questions = [...body().querySelectorAll(`[data-q^="${i}-"]`)].map(row => ({
+        label: $('[data-qf="label"]', row).value, placeholder: $('[data-qf="placeholder"]', row).value, max: +$('[data-qf="max"]', row).value || 1000,
+        required: $('[data-qf="required"]', row).checked, long: $('[data-qf="long"]', row).checked, min: 0}));
+    });
+  };
+  wireSegs(body(), () => { grab(); panelEditor(); });
+  body().querySelectorAll("[data-addq]").forEach(b => b.onclick = () => { grab(); p.types[+b.dataset.addq].questions.push({label: "", placeholder: "", max: 1000, required: true, long: false}); panelEditor(); });
+  body().querySelectorAll("[data-rmq]").forEach(b => b.onclick = () => { grab(); const [ti, qi] = b.dataset.rmq.split("-").map(Number); p.types[ti].questions.splice(qi, 1); panelEditor(); });
+  p.types.forEach((t, i) => $(`#tt-del-${i}`).onclick = () => { grab(); p.types.splice(i, 1); panelEditor(); });
+  $("#tt-add").onclick = () => { grab(); const t = newType(); t.label = ""; p.types.push(t); panelEditor(); };
+  $("#tp-cancel").onclick = () => { editing = null; tabTkPanels(); };
+  $("#tp-save").onclick = async () => {
+    grab();
+    const b = $("#tp-save"); b.classList.add("busy"); b.disabled = true;
+    try {
+      const payload = {...p, types: p.types.map(({_open, ...x}) => x)};
+      const r = await api(`/api/dash/guild/${G.guild.id}/ticketpanels` + (p.id ? `/${p.id}` : ""), {method: p.id ? "PUT" : "POST", body: payload});
+      G.ticket_panels = (G.ticket_panels || []).filter(x => x.id !== r.panel.id).concat([r.panel]).sort((a, b) => a.id - b.id);
+      toast("ok", p.id ? "Panel updated" : "Panel posted", "It's live in Discord now.");
+      editing = null;
+      showGuild();
+    } catch (e) { toast("bad", "Not posted", e.message); b.classList.remove("busy"); b.disabled = false; }
+  };
+}
+
+/* ---------- Tickets: the list ---------- */
+let tkStatus = "open";
+async function tabTkList() {
+  body().innerHTML = `<div class="logbar">${segHTML("tks", tkStatus, {open: "Open", closed: "Closed", deleted: "Deleted"})}</div><div id="tk-rows">${loading("Reading the tickets")}</div>`;
+  wireSegs(body(), (_, v) => { tkStatus = v; tabTkList(); });
+  let r;
+  try { r = await api(`/api/dash/guild/${G.guild.id}/tickets?status=${tkStatus}`); }
+  catch (e) { $("#tk-rows").innerHTML = `<div class="note bad"><b>The tickets didn't load</b>${esc(e.message)}</div>`; return; }
+  const when = s => s ? new Date(s * 1000).toLocaleString() : "—";
+  $("#tk-rows").innerHTML = r.tickets.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th class="num">#</th><th>Kind</th><th>Opened by</th><th>Claimed by</th><th>Opened</th><th>${tkStatus === "open" ? "Last message" : "Closed"}</th><th></th></tr></thead><tbody>${r.tickets.map(t => `
+    <tr><td class="num">${t.number}</td><td>${esc(t.type_label || "")}</td><td>${esc(t.owner_name)}</td><td class="mono">${t.claimed_by ? esc(t.claimed_by) : "—"}</td>
+    <td style="white-space:nowrap">${when(t.created_at)}</td><td style="white-space:nowrap">${when(tkStatus === "open" ? t.last_activity : t.closed_at)}${t.close_reason ? `<br><span class="muted">${esc(t.close_reason)}</span>` : ""}</td>
+    <td>${tkStatus !== "deleted" ? `<a href="https://discord.com/channels/${G.guild.id}/${t.channel_id}" target="_blank" rel="noopener">Open in Discord</a>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+    : emptyState("nod", `No ${tkStatus} tickets`, tkStatus === "open" ? "Tickets show up here when someone opens one from a panel." : "Nothing here yet.");
+}
+
+/* ---------- Tickets: settings ---------- */
+function tabTkSettings() {
+  const c = G.config.tickets;
+  body().innerHTML = `<div class="grid g2">
+    <section class="panel"><header><h3>Closing</h3></header><div class="pad"><div class="switches">
+      ${sw("ts-two", "Ask \"are you sure?\" before closing", c.two_step_close)}
+      ${sw("ts-keep", "Keep closed tickets, with Reopen, Transcript and Delete buttons (off: delete them on close)", c.keep_closed)}
+      ${sw("ts-claim", "Show a Claim button, so someone on the team takes a ticket", c.claiming)}
+      ${sw("ts-leave", "Close someone's tickets when they leave the server", c.close_when_owner_leaves)}</div>
+      <div class="b-row2" style="margin-top:12px">${field("ts-auto", "Close after this many quiet hours", `<input type="number" id="ts-auto" min="0" max="720" value="${c.auto_close_hours}">`, "0 = never")}
+        ${field("ts-glimit", "Open tickets per person, all kinds", `<input type="number" id="ts-glimit" min="0" max="50" value="${c.global_limit}">`, "0 = no limit")}</div>
+    </div></section>
+    <section class="panel"><header><h3>Transcripts and log</h3></header><div class="pad">
+      ${field("ts-tr", "Transcript channel", channelSelect("ts-tr", c.transcript_channel_id, "None"), "Transcripts are web pages (HTML) of up to 1000 messages, with pictures.")}
+      <div class="switches" style="margin-bottom:12px">${sw("ts-save", "Save a transcript there when a ticket closes or is deleted", c.save_transcript)}${sw("ts-dm", "Send the person who opened it a copy when it closes", c.dm_transcript)}</div>
+      ${field("ts-log", "Log channel", channelSelect("ts-log", c.log_channel_id, "No log"), "Opened, closed, reopened, claimed and deleted, with who did it.")}
+    </div></section></div>
+    <div class="form-foot btnrow">${btn("ts-save-btn", "Save", "primary", "save")}</div>`;
+  $("#ts-save-btn").onclick = () => saveSection("tickets", {two_step_close: on("ts-two"), keep_closed: on("ts-keep"), claiming: on("ts-claim"),
+    close_when_owner_leaves: on("ts-leave"), auto_close_hours: +val("ts-auto") || 0, global_limit: +val("ts-glimit") || 0,
+    transcript_channel_id: val("ts-tr") || null, save_transcript: on("ts-save"), dm_transcript: on("ts-dm"), log_channel_id: val("ts-log") || null},
+    "Tickets work this way from now on.");
+}
+
+/* =====================================================================================
+   The bot's own profile (owner only, its own screen in the rail)
+   ===================================================================================== */
+let PROF = null;
+window.showProfile = async () => {
+  $("#crumb-t").textContent = "Bot profile";
+  const root = $("#profile-root");
+  root.innerHTML = loading("Asking Discord for the bot's profile");
+  try { PROF = await api("/api/profile"); }
+  catch (e) { root.innerHTML = emptyState("idle", "The profile can't be read", esc(e.message) + " Start the bot from the top bar first."); return; }
+  const pr = PROF.presence;
+  const pending = {avatar: null, banner: null, remove_avatar: false, remove_banner: false};
+  const STATUS = {online: "Online", idle: "Idle", dnd: "Do not disturb", invisible: "Invisible"};
+  const ACT = {none: "Nothing", playing: "Playing", listening: "Listening to", watching: "Watching", competing: "Competing in", streaming: "Streaming", custom: "Custom status"};
+  root.innerHTML = `<header class="fleet-head page-intro"><div class="fh-words"><p class="eyebrow">Bot · <b>${esc(PROF.id)}</b></p>
+      <h1 class="brush fh-title">Bot profile</h1><p class="lede">How the bot looks everywhere on Discord. Changes show up for everyone within a minute.</p></div>
+      <img class="mascot fh-fox" src="${M("piglindance")}" alt="" width="92" height="92"></header>
+    <div class="split">
+      <div class="stack">
+        <section class="panel"><header><h3>Pictures</h3></header><div class="pad">
+          <div class="b-row2">
+            <div class="field"><label>Avatar</label><div class="btnrow">${btn("pf-av", "Upload", "sm", "upload")}${btn("pf-av-rm", "Remove", "sm ghost")}</div><div class="help">PNG, JPG or GIF, up to 8 MB.</div></div>
+            <div class="field"><label>Banner</label><div class="btnrow">${btn("pf-bn", "Upload", "sm", "upload")}${btn("pf-bn-rm", "Remove", "sm ghost")}</div><div class="help">Wide, about 600 × 240.</div></div>
+          </div><input type="file" id="pf-file" hidden accept="image/png,image/jpeg,image/gif,image/webp">
+        </div></section>
+        <section class="panel"><header><h3>Name and About me</h3></header><div class="pad">
+          ${field("pf-name", "Username", `<input id="pf-name" value="${esc(PROF.username)}" maxlength="32">`, "Discord allows two username changes an hour. Per-server nicknames are set in each server.")}
+          ${field("pf-about", "About me", `<textarea id="pf-about" rows="5" maxlength="400" style="font-family:var(--body);font-size:15px">${esc(PROF.about)}</textarea>`, "Shown on the bot's profile. Markdown works.")}
+        </div></section>
+        <section class="panel"><header><h3>Status</h3></header><div class="pad">
+          <div class="field"><label>Shown as</label>${segHTML("pfst", pr.status, STATUS)}</div>
+          <div class="b-row2">${field("pf-act", "Activity", `<select id="pf-act">${Object.entries(ACT).map(([k, v]) => `<option value="${k}" ${k === pr.activity ? "selected" : ""}>${v}</option>`).join("")}</select>`)}
+            ${field("pf-text", "Text", `<input id="pf-text" value="${esc(pr.text)}" maxlength="128" placeholder="/play">`)}</div>
+          <div id="pf-url-row" ${pr.activity === "streaming" ? "" : "hidden"}>${field("pf-url", "Stream link", `<input id="pf-url" value="${esc(pr.url || "")}" placeholder="https://twitch.tv/...">`)}</div>
+        </div></section>
+        <div class="btnrow">${btn("pf-save", "Save", "primary", "save")}</div>
+      </div>
+      <aside class="stack"><section class="panel"><header><h3>Preview</h3></header><div class="pad" style="padding:0">
+        <div class="pf-card"><div class="pf-banner" id="pfv-banner"></div><img class="pf-avatar" id="pfv-avatar" alt="">
+          <div class="pf-body"><b id="pfv-name"></b> <span class="dc-app">APP</span><div class="pf-status" id="pfv-status"></div>
+          <div class="pf-about" id="pfv-about"></div></div></div></div></section></aside>
+    </div>`;
+  const paint = () => {
+    const banner = pending.remove_banner ? null : pending.banner ? "data:image;base64," + pending.banner : PROF.banner;
+    $("#pfv-banner").style.backgroundImage = banner ? `url("${banner}")` : "";
+    $("#pfv-avatar").src = pending.remove_avatar ? "/ds/icon.png" : pending.avatar ? "data:image;base64," + pending.avatar : PROF.avatar;
+    $("#pfv-name").textContent = val("pf-name");
+    const act = val("pf-act"), text = val("pf-text");
+    $("#pfv-status").textContent = (STATUS[segVal(root, "pfst")] || "Online") + (act !== "none" && text ? " · " + (act === "custom" ? text : ACT[act] + " " + text) : "");
+    $("#pfv-about").innerHTML = md(val("pf-about"));
+    $("#pf-url-row").hidden = act !== "streaming";
+  };
+  let target = null;
+  const file = $("#pf-file");
+  $("#pf-av").onclick = () => { target = "avatar"; file.click(); };
+  $("#pf-bn").onclick = () => { target = "banner"; file.click(); };
+  $("#pf-av-rm").onclick = () => { pending.avatar = null; pending.remove_avatar = true; paint(); };
+  $("#pf-bn-rm").onclick = () => { pending.banner = null; pending.remove_banner = true; paint(); };
+  file.onchange = async () => {
+    const f = file.files[0]; file.value = "";
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) return toast("bad", "That file is too big", "Pictures can be up to 8 MB.");
+    pending[target] = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.readAsDataURL(f); });
+    pending["remove_" + target] = false;
+    paint();
+  };
+  ["pf-name", "pf-about", "pf-text", "pf-url"].forEach(id => $("#" + id).oninput = paint);
+  $("#pf-act").onchange = paint;
+  wireSegs(root, paint);
+  $("#pf-save").onclick = async () => {
+    const b = $("#pf-save"); b.classList.add("busy"); b.disabled = true;
+    const bodyOut = {about: val("pf-about"), presence: {status: segVal(root, "pfst"), activity: val("pf-act"), text: val("pf-text"), url: val("pf-url")}};
+    if (val("pf-name") !== PROF.username) bodyOut.username = val("pf-name");
+    for (const k of ["avatar", "banner"]) {
+      if (pending[k]) bodyOut[k] = pending[k];
+      if (pending["remove_" + k]) bodyOut["remove_" + k] = true;
+    }
+    try {
+      const r = await api("/api/profile", {method: "POST", body: bodyOut});
+      toast("ok", "Profile saved", r.done.length ? "Changed: " + r.done.join(", ") + "." : "Nothing had changed.");
+      window.showProfile();
+    } catch (e) { toast("bad", "Not saved", e.message); b.classList.remove("busy"); b.disabled = false; }
+  };
+  paint();
+};
+
 /* =====================================================================================
    The Commands guide (its own screen in the rail)
    ===================================================================================== */
@@ -715,6 +1086,25 @@ const GUIDE = [
     ["/case · /reason", "Look up a case, change its reason", "Timeout Members"],
     ["/purge", "Delete up to 500 recent messages, optionally from one person", "Manage Messages"]]},
   {area: "Forum roles", kanji: "授", how: "Set up on Servers → Forum roles. When a post in a forum gets the tag you pick (for example Accepted), the person who made the post gets a role. Optionally the role goes again when the tag is removed, and the bot posts a message in the post or DMs the author. Make the tag moderator-only in the forum's settings, so authors can't tag their own posts.", cmds: []},
+  {area: "VC maker", kanji: "室", how: "Set up on Servers → VC maker. Join a generator voice channel and the bot makes you your own channel and moves you in; it's deleted when everyone leaves. Control it with the panel in its chat or these commands. If the owner leaves, anyone inside can claim it.", cmds: [
+    ["/voice name · limit · status", "Rename it, set how many can join, set the line under it", "the owner"],
+    ["/voice lock · unlock", "Stop or allow new people joining", "the owner"],
+    ["/voice ghost · unghost", "Hide or show it in the channel list", "the owner"],
+    ["/voice permit · reject", "Let a person or role in, or keep them out", "the owner"],
+    ["/voice invite · transfer", "DM someone an invite, or give the channel away", "the owner"],
+    ["/voice bitrate · region · nsfw", "Sound quality, voice server, age-restricted", "the owner"],
+    ["/voice text · lfm", "Add a text channel, or post Looking for members", "the owner"],
+    ["/voice claim", "Take over when the owner left", "anyone in it"],
+    ["/voice save · load", "Save your channel's settings for next time, or put them back", "the owner"],
+    ["/voice panel", "Post the control panel in any channel", "Manage Channels"]]},
+  {area: "Tickets", kanji: "票", how: "Make panels on Servers → Tickets: one button or dropdown option per kind of ticket, each with its own team, category, questions and first message. Editing a panel updates the posted message. In a ticket: Close (with or without a reason) and Claim; once closed: Reopen, Transcript, Delete.", cmds: [
+    ["/ticket close", "Close this ticket, optionally with a reason", "its owner or the team"],
+    ["/ticket closerequest", "Ask the owner if it can be closed", "the team"],
+    ["/ticket reopen · delete", "Reopen or delete it", "the team"],
+    ["/ticket claim", "Take the ticket (again to give it back)", "the team"],
+    ["/ticket add · remove", "Let someone in, or take them out", "the team"],
+    ["/ticket rename · transcript", "Rename it, or save a transcript", "the team"],
+    ["/ticket panel", "Post a panel again in this channel", "Manage Server"]]},
   {area: "Tags", kanji: "札", how: "Saved messages anyone can post by name. Make text tags in Discord, or tags with embeds and images on Servers → Tags.", cmds: [
     ["/tag show", "Post a tag (type to search the names)", "everyone"],
     ["/tag list · /tag info", "Every tag, or who made one and how often it's used", "everyone"],

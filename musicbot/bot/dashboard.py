@@ -32,6 +32,9 @@ NEEDED = {  # permission -> what it is for, in words
     "view_audit_log": "naming who did a ban or kick in the logs",
     "add_reactions": "reaction-role menus",
     "embed_links": "every message the bot sends",
+    "manage_channels": "the VC maker and tickets",
+    "move_members": "moving people into their new voice channel",
+    "create_private_threads": "thread tickets",
 }
 
 
@@ -90,6 +93,15 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
                   "problem": role_problem(g, r)}
                  for r in reversed(g.roles) if not r.is_default()]
         emojis = [{"id": str(e.id), "name": e.name, "text": str(e), "url": str(e.url)} for e in g.emojis]
+        voice = [{"id": str(v.id), "name": v.name, "category": v.category.name if v.category else ""}
+                 for v in sorted(g.voice_channels, key=lambda c: (c.category.position if c.category else -1, c.position))]
+        categories = [{"id": str(c.id), "name": c.name} for c in sorted(g.categories, key=lambda c: c.position)]
+        tk = bot.get_cog("Tickets")
+        panels = [_ids_to_str({k: v for k, v in p.items()}) for p in tk.panels.values() if p["guild_id"] == g.id] if tk else []
+        vm = bot.get_cog("VoiceMaster")
+        temp = [{"id": str(cid), "name": (g.get_channel(cid).name if g.get_channel(cid) else "?"), "owner_id": str(r["owner_id"] or ""),
+                 "members": len(g.get_channel(cid).members) if g.get_channel(cid) else 0}
+                for cid, r in (vm.owned.items() if vm else []) if r["guild_id"] == g.id]
         forums = []
         for f in sorted(g.forums, key=lambda c: c.position):
             p = f.permissions_for(me)
@@ -100,6 +112,8 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
         cfg = await bot.configs.get(g.id)
         return web.json_response({
             "guild": guild_card(g), "channels": channels, "roles": roles, "emojis": emojis, "forums": forums,
+            "voice_channels": voice, "categories": categories, "ticket_panels": panels, "temp_channels": temp,
+            "bitrate_limit": int(g.bitrate_limit // 1000),
             "bot_role": me.top_role.name, "missing": missing, "intents": intents(),
             "config": {k: _ids_to_str(v) for k, v in cfg.items()},
             "menus": [_ids_to_str(m) for m in await bot.db.menus(g.id)],
@@ -253,6 +267,34 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400"})
 
+    async def save_panel(request: web.Request):
+        g = await guild_or_403(request)
+        pid = int(request.match_info["pid"]) if "pid" in request.match_info else None
+        try:
+            row = await bot.get_cog("Tickets").save_panel(g, await request.json(), pid)
+        except ConfigError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return web.json_response({"ok": True, "panel": _ids_to_str(row)})
+
+    async def delete_panel(request: web.Request):
+        g = await guild_or_403(request)
+        try:
+            await bot.get_cog("Tickets").delete_panel(g, int(request.match_info["pid"]))
+        except ConfigError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return web.json_response({"ok": True})
+
+    async def ticket_list(request: web.Request):
+        g = await guild_or_403(request)
+        status = request.query.get("status", "open")
+        rows = await bot.db.all("SELECT * FROM tickets WHERE guild_id=? AND status=? ORDER BY number DESC LIMIT 100",
+                                (g.id, status if status in ("open", "closed", "deleted") else "open"))
+        for r in rows:
+            m = g.get_member(r["owner_id"])
+            r["owner_name"] = str(m) if m else str(r["owner_id"])
+            r.pop("answers", None)
+        return web.json_response({"tickets": _ids_to_str(rows)})
+
     return [
         web.get("/dash/guilds", guilds),
         web.get("/dash/guild/{gid}", guild_detail),
@@ -270,6 +312,10 @@ def routes(bot: "MusicBot") -> list[web.RouteDef]:
         web.delete("/dash/guild/{gid}/posts/{pid}", delete_post),
         web.post("/dash/guild/{gid}/media", upload),
         web.get("/dash/guild/{gid}/media/{name}", media),
+        web.post("/dash/guild/{gid}/ticketpanels", save_panel),
+        web.put("/dash/guild/{gid}/ticketpanels/{pid}", save_panel),
+        web.delete("/dash/guild/{gid}/ticketpanels/{pid}", delete_panel),
+        web.get("/dash/guild/{gid}/tickets", ticket_list),
     ]
 
 

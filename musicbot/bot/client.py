@@ -14,11 +14,14 @@ from .eventlog import EventLog
 from .forumroles import ForumRoles
 from .guildconfig import GuildConfigs
 from .moderation import Moderation
+from .profile import Profile
 from .player import GuildPlayer
 from .roles import ReactionRoles
 from .spotify import Spotify
 from .tags import Tags
+from .tickets import Tickets
 from .utility import Utility
+from .voicemaster import VoiceMaster
 from .welcome import Welcome
 
 log = logging.getLogger("musicbot")
@@ -29,6 +32,9 @@ INVITE_PERMISSIONS = discord.Permissions(
     manage_roles=True,                                               # autorole, reaction roles
     kick_members=True, ban_members=True, moderate_members=True,     # moderation
     manage_messages=True, view_audit_log=True,                       # purge, logs
+    manage_channels=True, move_members=True, set_voice_channel_status=True,  # VC maker
+    manage_threads=True, create_private_threads=True, send_messages_in_threads=True,  # tickets
+    use_external_emojis=True,
 ).value
 
 
@@ -57,7 +63,8 @@ class MusicBot(commands.Bot):
     async def setup_hook(self) -> None:
         self.db = await Database.open()
         self.configs = GuildConfigs(self.db)
-        for cog in (Music, Welcome, ReactionRoles, Moderation, EventLog, Tags, Community, Utility, ForumRoles):
+        for cog in (Music, Welcome, ReactionRoles, Moderation, EventLog, Tags, Community, Utility, ForumRoles,
+                    VoiceMaster, Tickets, Profile):
             await self.add_cog(cog(self))
         self.api = await api.start(self)
         synced = await self.tree.sync()

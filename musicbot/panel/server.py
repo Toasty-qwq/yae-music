@@ -368,6 +368,16 @@ async def delete_cookies(_):
     return web.json_response({"ok": True})
 
 
+# ---- the bot's own profile (owner only) ----------------------------------------------------------
+
+async def profile(request: web.Request):
+    body = await request.read() if request.method == "POST" else None
+    status_code, content_type, data = await sup.bot_proxy(request.method, "/profile", {}, body, timeout=60)
+    if request.method == "POST" and status_code == 200:
+        sup.panel_log("Bot profile changed from the panel.")
+    return web.Response(body=data, status=status_code, content_type=content_type)
+
+
 # ---- dashboard (owner and Discord sign-ins) -------------------------------------------------------
 
 async def dash_proxy(request: web.Request):
@@ -415,6 +425,8 @@ def make_app() -> web.Application:
     r.add_get("/auth/discord", discord_login.start)
     r.add_get("/auth/discord/callback", discord_login.callback)
     r.add_route("*", "/api/dash/{tail:.+}", dash_proxy)
+    r.add_get("/api/profile", profile)
+    r.add_post("/api/profile", profile)
     r.add_post("/api/setup", setup)
     r.add_post("/api/login", login)
     r.add_post("/api/logout", logout)

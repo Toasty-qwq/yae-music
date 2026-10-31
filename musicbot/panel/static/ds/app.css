@@ -110,3 +110,13 @@
   .b-row2,.b-row3{grid-template-columns:minmax(0,1fr)}
   .b-fieldrow{grid-template-columns:minmax(0,1fr) auto;}
 }
+
+/* --- bot profile preview: drawn like a Discord profile card --- */
+.pf-card{background:var(--band-bg);color:var(--band-fg);position:relative;padding-bottom:16px}
+.pf-banner{height:120px;background:var(--rose) center/cover no-repeat}
+.pf-avatar{width:84px;height:84px;border-radius:50%;border:6px solid var(--band-bg);position:absolute;left:16px;top:72px;
+  background:var(--band-card);object-fit:cover}
+.pf-body{padding:52px 16px 0}
+.pf-body b{font-size:18px}
+.pf-status{font-size:13px;color:var(--band-mid);margin:4px 0 10px}
+.pf-about{background:var(--band-card);border-radius:6px;padding:10px 12px;font-size:13.5px;overflow-wrap:anywhere;min-height:20px}
