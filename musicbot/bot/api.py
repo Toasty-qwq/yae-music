@@ -110,13 +110,23 @@ async def start(bot: "MusicBot") -> ControlApi | None:
             return web.json_response(await bot.get_cog("Profile").read())
         except discord.HTTPException as e:
             return web.json_response({"ok": False, "error": f"Discord didn't answer: {e.text or e}"}, status=502)
+        except Exception:
+            log.exception("reading the bot profile failed")
+            return web.json_response({"ok": False, "error": "Reading the profile failed; the Logs page has the details."},
+                                     status=500)
 
     async def profile_post(request: web.Request):
         try:
             done = await bot.get_cog("Profile").update(await request.json())
+            return web.json_response({"ok": True, "done": done, **await bot.get_cog("Profile").read()})
         except ConfigError as e:
             return web.json_response({"ok": False, "error": str(e)}, status=400)
-        return web.json_response({"ok": True, "done": done, **await bot.get_cog("Profile").read()})
+        except discord.HTTPException as e:
+            return web.json_response({"ok": False, "error": f"Discord said no: {e.text or e}"}, status=502)
+        except Exception:
+            log.exception("changing the bot profile failed")
+            return web.json_response({"ok": False, "error": "Changing the profile failed; the Logs page has the details."},
+                                     status=500)
     app.router.add_get("/profile", profile_get)
     app.router.add_post("/profile", profile_post)
     runner = web.AppRunner(app, access_log=None)

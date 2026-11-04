@@ -72,7 +72,7 @@ class Profile(commands.Cog):
         return {
             "username": u.name, "id": str(u.id),
             "avatar": u.display_avatar.with_size(256).url,
-            "banner": (b.with_size(600).url if (b := (await self.bot.fetch_user(u.id)).banner) else None),  # needs a full fetch
+            "banner": (b.with_size(1024).url if (b := (await self.bot.fetch_user(u.id)).banner) else None),  # needs a full fetch
             "about": app.description or "",
             "presence": await self.presence(),
         }

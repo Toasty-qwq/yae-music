@@ -349,7 +349,7 @@ async function api(path, {method = "GET", body} = {}) {
   let data = {};
   try { data = await r.json(); } catch {}
   if (r.status === 401 && !path.startsWith("/api/login")) { showGate(false); throw new Error("Your sign-in ran out. Sign in again."); }
-  if (!r.ok || data.ok === false) throw new Error(data.error || r.statusText);
+  if (!r.ok || data.ok === false) throw new Error(data.error || r.statusText || `The server answered ${r.status}.`);
   return data;
 }
 

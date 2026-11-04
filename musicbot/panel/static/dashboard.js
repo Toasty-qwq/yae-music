@@ -983,7 +983,10 @@ window.showProfile = async () => {
   const root = $("#profile-root");
   root.innerHTML = loading("Asking Discord for the bot's profile");
   try { PROF = await api("/api/profile"); }
-  catch (e) { root.innerHTML = emptyState("idle", "The profile can't be read", esc(e.message) + " Start the bot from the top bar first."); return; }
+  catch (e) {
+    const hint = /isn't running|didn't answer/.test(e.message) ? " Start the bot from the top bar first." : "";
+    root.innerHTML = emptyState("idle", "The profile can't be read", esc(e.message) + hint); return;
+  }
   const pr = PROF.presence;
   const pending = {avatar: null, banner: null, remove_avatar: false, remove_banner: false};
   const STATUS = {online: "Online", idle: "Idle", dnd: "Do not disturb", invisible: "Invisible"};
