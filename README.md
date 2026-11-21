@@ -98,7 +98,17 @@ channel (change this in Settings).
   view show the same lines.
 - **Settings**: token, optional Spotify keys, default volume, idle timeout, playlist and queue
   limits, auto-start, auto-restart after crashes, and updating yt-dlp on start.
-- **Upkeep**: versions, **Update yt-dlp now**, YouTube cookies upload, panel password.
+- **Upkeep**:
+  - **Check-up** ("Find and fix problems"): checks the token and internet, intents, that the bot
+    is online, ffmpeg, yt-dlp (and updates it), that a YouTube video plays, the Spotify keys, the
+    database, disk space, permissions and roles in every server, stuck voice connections, and that
+    the public address answers. It fixes what it can by itself (starts or restarts the bot, updates
+    yt-dlp, clears stuck voice connections, deletes old logs when the disk is full) and says what to
+    do about the rest.
+  - **Scheduled restart**: every day, on chosen weekdays, once a month, or once on a date, at a
+    time in your own time zone. It can update yt-dlp first and wait while someone is listening (2
+    hours at most). Restarting doesn't change the ping, which depends on the internet connection.
+  - Versions, **Update yt-dlp now**, YouTube cookies upload, panel password.
 
 Forgot the panel password? Set `PANEL_PASSWORD` in `docker-compose.yml` (or as an environment
 variable before `start.bat`). While it is set, it replaces the saved password.

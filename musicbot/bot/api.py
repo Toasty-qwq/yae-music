@@ -15,7 +15,7 @@ from aiohttp import web
 
 import discord
 
-from . import dashboard
+from . import dashboard, doctor
 from .errors import ConfigError
 from .player import LoopMode
 
@@ -127,6 +127,13 @@ async def start(bot: "MusicBot") -> ControlApi | None:
             log.exception("changing the bot profile failed")
             return web.json_response({"ok": False, "error": "Changing the profile failed; the Logs page has the details."},
                                      status=500)
+    async def doctor_get(_):
+        return web.json_response(await doctor.report(bot))
+
+    async def doctor_fix(_):
+        return web.json_response({"ok": True, "fixed": await doctor.fix_voice(bot)})
+    app.router.add_get("/doctor", doctor_get)
+    app.router.add_post("/doctor/fix-voice", doctor_fix)
     app.router.add_get("/profile", profile_get)
     app.router.add_post("/profile", profile_post)
     runner = web.AppRunner(app, access_log=None)

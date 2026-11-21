@@ -17,7 +17,8 @@ from pathlib import Path
 from aiohttp import web
 
 from .. import settings
-from . import auth, discord_login
+from . import auth, discord_login, schedule
+from .doctor import Doctor
 from .supervisor import Supervisor
 
 log = logging.getLogger("musicbot.panel")
@@ -368,6 +369,38 @@ async def delete_cookies(_):
     return web.json_response({"ok": True})
 
 
+def _forget_ffmpeg() -> None:
+    global _ffmpeg_version
+    _ffmpeg_version = None
+
+
+scheduler = schedule.Scheduler(sup, update_ytdlp)
+doctor = Doctor(sup, update_ytdlp, _ffmpeg, _forget_ffmpeg)
+
+
+async def get_schedule(_):
+    return web.json_response(scheduler.status())
+
+
+async def put_schedule(request):
+    try:
+        s = schedule.validate(await request.json())
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
+    settings.update({"restart_schedule": s, "restart_schedule_saved": time.time()})
+    scheduler.waiting_since = None
+    nxt = scheduler.next_at()
+    sup.panel_log("Restart schedule " + (f"saved; next restart {nxt.strftime('%a %d %b %H:%M')} ({s['tz']})."
+                                         if nxt else "turned off." if not s["enabled"] else "saved, but it never comes up."))
+    return web.json_response({"ok": True, **scheduler.status()})
+
+
+async def checkup(request):
+    if request.method == "POST":
+        doctor.run()
+    return web.json_response(doctor.snapshot())
+
+
 # ---- the bot's own profile (owner only) ----------------------------------------------------------
 
 async def profile(request: web.Request):
@@ -406,10 +439,14 @@ async def _boot(app: web.Application) -> None:
         elif not cfg.get("discord_token"):
             sup.panel_log("No Discord bot token yet — open the panel's Settings tab to add it.", "warn")
     app["boot"] = asyncio.create_task(run())
+    scheduler.start()
 
 
 async def _shutdown(app: web.Application) -> None:
     app["boot"].cancel()
+    for task in (scheduler.task, doctor.task):
+        if task:
+            task.cancel()
     await sup.stop()
 
 
@@ -444,6 +481,10 @@ def make_app() -> web.Application:
     r.add_post("/api/maintenance/update-ytdlp", update_ytdlp_route)
     r.add_post("/api/cookies", upload_cookies)
     r.add_delete("/api/cookies", delete_cookies)
+    r.add_get("/api/schedule", get_schedule)
+    r.add_post("/api/schedule", put_schedule)
+    r.add_get("/api/checkup", checkup)
+    r.add_post("/api/checkup", checkup)
     app.on_startup.append(_boot)
     app.on_shutdown.append(_shutdown)
     return app

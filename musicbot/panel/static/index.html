@@ -271,12 +271,41 @@
             <div class="fh-words">
               <p class="eyebrow">Running on <b id="up-where">this machine</b></p>
               <h1 class="brush fh-title" id="up-title">Upkeep</h1>
-              <p class="lede">What the bot is built from, and the few things that keep YouTube playing.</p>
+              <p class="lede">A check-up that fixes problems by itself, scheduled restarts, and the few things that keep YouTube playing.</p>
             </div>
             <img class="mascot fh-fox" src="/ds/mascots/nod.gif" alt="" width="92" height="92" draggable="false">
           </header>
+          <section class="panel" id="checkup">
+            <header><h3>Check-up</h3><span class="sp" id="cu-when"></span></header>
+            <div class="pad">
+              <p>Looks for problems and fixes the ones it can by itself: starts or restarts a stuck bot, updates yt-dlp, tests that YouTube plays, clears stuck voice connections and old logs. Anything only you can fix comes with what to do.</p>
+              <button class="btn primary" type="button" id="btn-checkup"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 4.5a4.5 4.5 0 0 0-5.9 5.9L4 16v4h4l5.6-5.6a4.5 4.5 0 0 0 5.9-5.9L17 11l-3-3z"/></svg><span>Find and fix problems</span></button>
+              <ol class="cu-steps" id="cu-steps"></ol>
+            </div>
+          </section>
           <div class="grid g2">
             <div class="stack">
+              <section class="panel" id="restart-schedule">
+                <header><h3>Scheduled restart</h3><span class="sp" id="rs-pill"></span></header>
+                <div class="pad">
+                  <p>A restart now and then loads the newest yt-dlp and frees memory the bot built up. It doesn't change the ping.</p>
+                  <label class="switch"><input type="checkbox" id="rs-on"><span class="track"></span>Restart on a schedule</label>
+                  <div id="rs-form">
+                    <div class="field"><label>Quick picks</label><div class="chiprow" id="rs-presets"></div></div>
+                    <div class="field"><label>How often</label><div class="seg" role="group" id="rs-repeat"></div></div>
+                    <div class="field" id="rs-days-f"><label>On these days</label><div class="chiprow" role="group" id="rs-days"></div></div>
+                    <div class="field" id="rs-day-f"><label for="rs-day">Day of the month</label><select id="rs-day"></select><div class="help">In shorter months, a day that doesn't exist becomes the month's last day.</div></div>
+                    <div class="field" id="rs-date-f"><label for="rs-date">Date</label><input type="date" id="rs-date"></div>
+                    <div class="field"><label for="rs-time">Time</label><input type="time" id="rs-time"><div class="help" id="rs-tz"></div></div>
+                    <div class="switches">
+                      <label class="switch"><input type="checkbox" id="rs-ytdlp"><span class="track"></span>Update yt-dlp first</label>
+                      <label class="switch"><input type="checkbox" id="rs-wait"><span class="track"></span>Wait while someone's listening (2 hours at most)</label>
+                    </div>
+                  </div>
+                  <div class="note info" id="rs-next" hidden></div>
+                  <div class="btnrow" style="margin-top:14px"><button class="btn" type="button" id="rs-save"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/></svg><span>Save schedule</span></button></div>
+                </div>
+              </section>
               <section class="panel">
                 <header><h3>yt-dlp</h3><span class="sp" id="ytdlp-ver"></span></header>
                 <div class="pad">
@@ -285,7 +314,7 @@
                   <button class="btn primary" type="button" id="btn-update"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg><span>Update yt-dlp</span></button>
                 </div>
               </section>
-              <section class="panel">
+              <section class="panel" id="cookies-panel">
                 <header><h3>YouTube cookies</h3><span class="sp" id="cookie-pill"></span></header>
                 <div class="pad">
                   <p>Only needed when the log says <i>Sign in to confirm you're not a bot</i>, or for age-restricted videos. Export <code>cookies.txt</code> from a browser signed in to YouTube, ideally with a spare Google account.</p>
@@ -885,7 +914,157 @@ async function loadUpkeep() {
     $("#cookie-pill").innerHTML = s.has_cookies ? `<span class="pill ok">Uploaded</span>` : `<span class="pill dead">None</span>`;
     $("#btn-cookie-del").hidden = !s.has_cookies;
   } catch (e) { toast("bad", "Upkeep did not load", e.message); }
+  loadSchedule();
+  loadCheckup();
 }
+
+/* ---------- scheduled restart ---------- */
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const REPEATS = {daily: "Every day", weekly: "Every week", monthly: "Every month", once: "Once"};
+const RS_PRESETS = [
+  ["Every Monday, 4:00", {repeat: "weekly", days: [0], time: "04:00"}],
+  ["Once a week, Sunday 5:00", {repeat: "weekly", days: [6], time: "05:00"}],
+  ["Every day, 4:00", {repeat: "daily", time: "04:00"}],
+  ["Weekdays, 6:00", {repeat: "weekly", days: [0, 1, 2, 3, 4], time: "06:00"}],
+  ["1st of every month, 4:00", {repeat: "monthly", day: 1, time: "04:00"}],
+];
+let RS = null;
+const myZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; } };
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+
+function rsDescribe(r) {
+  const at = r.time;
+  if (r.repeat === "daily") return `every day at ${at}`;
+  if (r.repeat === "weekly") {
+    const d = [...r.days].sort();
+    const names = d.length === 7 ? "every day" : d.join() === "0,1,2,3,4" ? "every weekday" : d.join() === "5,6" ? "every Saturday and Sunday"
+      : "every " + d.map(i => WEEKDAY_NAMES[i]).join(", ").replace(/, ([^,]*)$/, " and $1");
+    return `${names} at ${at}`;
+  }
+  if (r.repeat === "monthly") return `on the ${r.day === 0 ? "last day" : ordinal(r.day)} of every month at ${at}`;
+  return r.date ? `once, on ${new Date(r.date + "T00:00").toLocaleDateString(undefined, {weekday: "long", day: "numeric", month: "long", year: "numeric"})} at ${at}` : "once (pick a date)";
+}
+
+function rsRead() {
+  return {
+    enabled: $("#rs-on").checked, repeat: RS.repeat, time: $("#rs-time").value || "04:00", days: RS.days,
+    day: Number($("#rs-day").value), date: $("#rs-date").value, tz: myZone(),
+    update_ytdlp: $("#rs-ytdlp").checked, wait_for_music: $("#rs-wait").checked,
+  };
+}
+
+function rsPaint() {
+  const r = RS;
+  $("#rs-form").hidden = !$("#rs-on").checked;
+  $("#rs-repeat").innerHTML = Object.entries(REPEATS).map(([k, v]) => `<button type="button" data-v="${k}" aria-pressed="${k === r.repeat}">${v}</button>`).join("");
+  $("#rs-days").innerHTML = WEEKDAYS.map((d, i) => `<button type="button" class="chip" data-d="${i}" aria-pressed="${r.days.includes(i)}" title="${WEEKDAY_NAMES[i]}">${d}</button>`).join("");
+  $("#rs-days-f").hidden = r.repeat !== "weekly";
+  $("#rs-day-f").hidden = r.repeat !== "monthly";
+  $("#rs-date-f").hidden = r.repeat !== "once";
+  $("#rs-repeat").querySelectorAll("button").forEach(b => b.onclick = () => { RS.repeat = b.dataset.v; rsPaint(); });
+  $("#rs-days").querySelectorAll("button").forEach(b => b.onclick = () => {
+    const d = Number(b.dataset.d);
+    RS.days = RS.days.includes(d) ? RS.days.filter(x => x !== d) : [...RS.days, d].sort();
+    rsPaint();
+  });
+  const zone = myZone();
+  $("#rs-tz").textContent = `Your time zone: ${zone}` + (r.saved_tz && r.saved_tz !== zone ? ` (it was saved in ${r.saved_tz}; saving switches it to yours).` : ".");
+  const draft = rsRead();
+  const note = $("#rs-next");
+  note.hidden = false;
+  note.className = "note info";
+  if (!draft.enabled) {
+    note.innerHTML = r.enabled_saved ? "Save to turn scheduled restarts off." : "Off. The bot only restarts when you press Restart, or after a crash.";
+  } else {
+    const next = r.next && r.enabled_saved ? new Date(r.next * 1000) : null;
+    note.innerHTML = `<b>Restarts ${esc(rsDescribe(draft))}</b>` +
+      (r.waiting_since ? "Due now, waiting for the music to stop." :
+       next ? `Next: ${esc(next.toLocaleString(undefined, {weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}))}` : "Save to set the next restart.");
+  }
+  $("#rs-pill").innerHTML = r.enabled_saved ? `<span class="pill ok">On</span>` : `<span class="pill dead">Off</span>`;
+}
+
+async function loadSchedule() {
+  try {
+    const r = await api("/api/schedule");
+    RS = {...r, days: r.days || [], saved_tz: r.tz, enabled_saved: r.enabled};
+    $("#rs-on").checked = r.enabled;
+    $("#rs-time").value = r.time;
+    $("#rs-date").value = r.date || "";
+    $("#rs-ytdlp").checked = r.update_ytdlp;
+    $("#rs-wait").checked = r.wait_for_music;
+    $("#rs-day").innerHTML = Array.from({length: 31}, (_, i) => `<option value="${i + 1}">${ordinal(i + 1)}</option>`).join("") + `<option value="0">Last day of the month</option>`;
+    $("#rs-day").value = String(r.day);
+    $("#rs-presets").innerHTML = RS_PRESETS.map(([label], i) => `<button type="button" class="chip" data-p="${i}">${esc(label)}</button>`).join("");
+    $("#rs-presets").querySelectorAll("button").forEach(b => b.onclick = () => {
+      const p = RS_PRESETS[b.dataset.p][1];
+      Object.assign(RS, p);
+      $("#rs-time").value = p.time;
+      if (p.day !== undefined) $("#rs-day").value = String(p.day);
+      rsPaint();
+    });
+    rsPaint();
+  } catch (e) { toast("bad", "The restart schedule did not load", e.message); }
+}
+["#rs-on", "#rs-time", "#rs-date", "#rs-day", "#rs-ytdlp", "#rs-wait"].forEach(id => $(id).addEventListener("change", () => RS && rsPaint()));
+$("#rs-save").onclick = async () => {
+  try {
+    const r = await api("/api/schedule", {method: "POST", body: rsRead()});
+    RS = {...r, days: r.days || [], saved_tz: r.tz, enabled_saved: r.enabled};
+    rsPaint();
+    toast("ok", r.enabled ? "Restart schedule saved" : "Scheduled restarts off",
+          r.enabled ? (r.next ? "Next: " + new Date(r.next * 1000).toLocaleString(undefined, {weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}) : "That time never comes up again.") : "");
+  } catch (e) { toast("bad", "The schedule was not saved", e.message); }
+};
+
+/* ---------- check-up ---------- */
+const CU_STATUS = {running: ["info", "Checking"], ok: ["ok", "OK"], fixed: ["plum", "Fixed"], warn: ["warn", "Needs you"],
+                   fail: ["bad", "Problem"], skip: ["dead", "Skipped"]};
+let cuTimer = null;
+function paintCheckup(c) {
+  const b = $("#btn-checkup");
+  b.disabled = c.busy;
+  b.classList.toggle("busy", c.busy);
+  $("#cu-when").textContent = c.busy ? "Running" : c.finished ? "Last run " + new Date(c.finished * 1000).toLocaleString(undefined, {weekday: "short", hour: "2-digit", minute: "2-digit"}) : "";
+  $("#cu-steps").innerHTML = c.steps.map(s => {
+    const [cls, word] = CU_STATUS[s.status] || CU_STATUS.skip;
+    const a = s.action;
+    const btn = !a ? "" : a.href ? `<a class="btn ghost" href="${esc(a.href)}"${a.href.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}><span>${esc(a.label)}</span></a>`
+      : `<button class="btn ghost" type="button" data-run="${esc(a.run)}"><span>${esc(a.label)}</span></button>`;
+    const body = s.status === "running" ? `Working on it<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>` : esc(s.detail);
+    return `<li class="cu-step"><span class="pill ${cls}">${word}</span><div class="cu-body"><b>${esc(s.title)}</b><p>${body}</p>${btn}</div></li>`;
+  }).join("");
+  $("#cu-steps").querySelectorAll("[data-run]").forEach(x => x.onclick = () => {
+    if (x.dataset.run === "restart") power("restart");
+    if (x.dataset.run === "cookies") { $("#cookies-panel").scrollIntoView({behavior: "smooth", block: "center"}); $("#btn-cookie-pick").focus(); }
+  });
+  if (!c.busy && cuTimer) {
+    clearInterval(cuTimer);
+    cuTimer = null;
+    const n = k => c.steps.filter(s => s.status === k).length;
+    const bad = n("fail"), need = n("warn"), fixed = n("fixed");
+    toast(bad ? "bad" : need ? "info" : "ok", bad ? "Check-up found problems" : need ? "Check-up done" : "All good",
+          [fixed && `${fixed} fixed`, need && `${need} need${need === 1 ? "s" : ""} you`, bad && `${bad} problem${bad === 1 ? "" : "s"}`].filter(Boolean).join(", ") || "Nothing needed fixing.");
+    loadUpkeep();
+  }
+}
+async function loadCheckup() {
+  try {
+    const c = await api("/api/checkup");
+    paintCheckup(c);
+    if (c.busy && !cuTimer) cuTimer = setInterval(pollCheckup, 1200);
+  } catch {}
+}
+async function pollCheckup() {
+  try { paintCheckup(await api("/api/checkup")); } catch { clearInterval(cuTimer); cuTimer = null; }
+}
+$("#btn-checkup").onclick = async () => {
+  try {
+    paintCheckup(await api("/api/checkup", {method: "POST"}));
+    if (!cuTimer) cuTimer = setInterval(pollCheckup, 1200);
+  } catch (e) { toast("bad", "The check-up didn't start", e.message); }
+};
 $("#btn-update").onclick = async () => {
   const b = $("#btn-update");
   b.classList.add("busy");

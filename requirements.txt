@@ -10,3 +10,5 @@ ytmusicapi>=1.10
 numpy>=1.26
 # The per-server settings, reaction-role menus and moderation cases live in SQLite.
 aiosqlite>=0.20
+# Time zones for the restart schedule (Windows has no system copy).
+tzdata

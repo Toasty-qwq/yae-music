@@ -120,3 +120,21 @@
 .pf-body b{font-size:18px}
 .pf-status{font-size:13px;color:var(--band-mid);margin:4px 0 10px}
 .pf-about{background:var(--band-card);border-radius:6px;padding:10px 12px;font-size:13.5px;overflow-wrap:anywhere;min-height:20px}
+
+/* Upkeep: the check-up's steps */
+.cu-steps{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.cu-steps:empty{display:none}
+.cu-step{display:grid;grid-template-columns:92px minmax(0,1fr);gap:12px;align-items:start;
+  padding:10px 12px;border:2px solid var(--rule);background:var(--paper-2)}
+.cu-step .pill{justify-self:start;margin-top:1px}
+.cu-body b{display:block;font-family:var(--num);font-weight:800;font-size:14px}
+.cu-body p{margin:3px 0 0;white-space:pre-line;font-size:13.5px;line-height:1.5;color:var(--mid);overflow-wrap:anywhere}
+.cu-body .btn{margin-top:8px}
+.cu-body .dots{display:inline-flex;gap:3px;margin-left:4px}
+.cu-body .dots i{width:4px;height:4px;border-radius:50%;background:currentColor;animation:beat 1.2s ease-in-out infinite}
+.cu-body .dots i:nth-child(2){animation-delay:.2s}
+.cu-body .dots i:nth-child(3){animation-delay:.4s}
+#checkup{margin-bottom:var(--sp-5, 24px)}
+#rs-form[hidden]{display:none}
+@media (max-width:560px){.cu-step{grid-template-columns:minmax(0,1fr);gap:6px}}
+#rs-repeat{flex-wrap:wrap;max-width:100%}
