@@ -1,7 +1,9 @@
-"""Sign in with Discord (OAuth2, ``identify`` scope only).
+"""Sign in with Discord (OAuth2, ``identify`` + ``guilds``).
 
-The dashboard never asks Discord for the person's server list: after sign-in it only knows who
-they are, and the bot checks on every request whether that person has Manage Server in a server.
+``guilds`` lets the Servers page list every server the person manages, including ones the bot
+isn't in yet (with an "Add" button), like Carl-bot. That list is only for showing: the bot still
+checks the person's permission in a server on every request. The list and the person's token are
+kept in memory only, so after a panel restart they see the bot's servers until they sign in again.
 
 Setup (owner, once): Developer Portal → the bot's application → OAuth2 → copy the Client Secret into
 the panel's Settings, and add ``<public address>/auth/discord/callback`` under Redirects.
@@ -10,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 import urllib.parse
 
 import aiohttp
@@ -22,6 +25,9 @@ log = logging.getLogger("musicbot.panel.discord")
 
 API = "https://discord.com/api/v10"
 STATE_COOKIE = "musicbot_oauth_state"
+ADMINISTRATOR, MANAGE_GUILD = 0x8, 0x20
+REFRESH = 60  # s before the list may be fetched again (Discord rate-limits /users/@me/guilds)
+_people: dict[str, dict] = {}  # user id -> {"token", "exp", "at", "guilds"}
 
 
 def config() -> dict:
@@ -55,7 +61,7 @@ async def start(request: web.Request) -> web.Response:
     state = secrets.token_urlsafe(24)
     url = "https://discord.com/oauth2/authorize?" + urllib.parse.urlencode({
         "client_id": c["client_id"], "response_type": "code", "redirect_uri": c["redirect_uri"],
-        "scope": "identify", "state": state, "prompt": "none"})
+        "scope": "identify guilds", "state": state, "prompt": "none"})
     resp = web.HTTPFound(url)
     # Lax, not Strict: the browser has to send it when Discord sends the person back here.
     resp.set_cookie(STATE_COOKIE, state, max_age=600, httponly=True, samesite="Lax", secure=_https(request))
@@ -85,6 +91,8 @@ async def callback(request: web.Request) -> web.Response:
                     _fail("discord")
     except aiohttp.ClientError:
         _fail("discord")
+    _people[str(me["id"])] = {"token": token["access_token"], "exp": time.time() + int(token.get("expires_in", 0)),
+                              "at": 0, "guilds": None}
     avatar = (f"https://cdn.discordapp.com/avatars/{me['id']}/{me['avatar']}.png?size=64"
               if me.get("avatar") else None)
     user = {"id": me["id"], "name": me.get("global_name") or me.get("username") or "you", "avatar": avatar}
@@ -94,3 +102,39 @@ async def callback(request: web.Request) -> web.Response:
                     httponly=True, samesite="Lax", secure=_https(request))
     resp.del_cookie(STATE_COOKIE)
     raise resp
+
+
+def forget(uid: str) -> None:
+    _people.pop(str(uid), None)
+
+
+def can_manage(g: dict, need: str) -> bool:
+    perms = int(g.get("permissions") or 0)
+    if g.get("owner") or perms & ADMINISTRATOR:
+        return True
+    return need == "manage_guild" and bool(perms & MANAGE_GUILD)
+
+
+async def user_guilds(uid: str, refresh: bool = False) -> list[dict] | None:
+    """The person's servers as Discord lists them, or None when there's no token (panel restarted)."""
+    p = _people.get(str(uid))
+    if not p or p["exp"] < time.time():
+        return None
+    if p["guilds"] is not None and (not refresh or time.time() - p["at"] < REFRESH):
+        return p["guilds"]
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+            async with s.get(f"{API}/users/@me/guilds", headers={"Authorization": f"Bearer {p['token']}"}) as r:
+                data = await r.json(content_type=None)
+                if r.status == 401:
+                    forget(uid)
+                    return None
+                if r.status != 200:
+                    return p["guilds"]  # rate-limited or Discord trouble: keep the last list
+    except (aiohttp.ClientError, TimeoutError):
+        return p["guilds"]
+    p["guilds"] = [{"id": g["id"], "name": g["name"], "owner": g.get("owner", False), "permissions": g.get("permissions", "0"),
+                    "icon": f"https://cdn.discordapp.com/icons/{g['id']}/{g['icon']}.png?size=128" if g.get("icon") else None}
+                   for g in data]
+    p["at"] = time.time()
+    return p["guilds"]

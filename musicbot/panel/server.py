@@ -23,12 +23,14 @@ from .supervisor import Supervisor
 
 log = logging.getLogger("musicbot.panel")
 STATIC = Path(__file__).parent / "static"
-OPEN_PATHS = {"/", "/healthz", "/api/auth", "/api/login", "/api/setup", "/favicon.ico"}
+OPEN_PATHS = {"/", "/admin", "/healthz", "/api/auth", "/api/public", "/api/login", "/api/setup", "/favicon.ico"}
 ANY_SESSION = ("/api/dash/", "/api/logout")  # Discord sign-ins reach only these; everything else is the owner's
 SECRET_KEYS = {"discord_token", "spotify_client_secret", "oauth_client_secret"}
 INT_KEYS = {"default_volume": (0, 200), "idle_timeout": (0, 1440), "max_playlist": (1, 5000),
             "max_queue": (1, 10000)}
 BOOL_KEYS = {"autostart", "auto_restart", "update_ytdlp_on_start"}
+CHOICE_KEYS = {"dash_permission": ("administrator", "manage_guild")}
+PANEL_ONLY = {"dash_permission", "oauth_client_secret", "autostart", "auto_restart", "update_ytdlp_on_start"}
 STR_KEYS = {"discord_token", "spotify_client_id", "spotify_client_secret", "ffmpeg_path", "public_url",
             "oauth_client_secret"}
 
@@ -119,7 +121,10 @@ async def login(request):
     return _login_response({"ok": True}, request)
 
 
-async def logout(_):
+async def logout(request):
+    s = auth.session(request.cookies.get(auth.COOKIE))
+    if s and s.get("u"):
+        discord_login.forget(s["u"]["id"])
     resp = web.json_response({"ok": True})
     resp.del_cookie(auth.COOKIE)
     return resp
@@ -260,6 +265,10 @@ async def put_settings(request):
             changes[k] = v
         elif k in BOOL_KEYS:
             changes[k] = bool(v)
+        elif k in CHOICE_KEYS:
+            if v not in CHOICE_KEYS[k]:
+                return web.json_response({"error": f"{k} must be one of {', '.join(CHOICE_KEYS[k])}."}, status=400)
+            changes[k] = v
         elif k in STR_KEYS:
             v = str(v).strip()
             if k in SECRET_KEYS and not v:
@@ -276,7 +285,8 @@ async def put_settings(request):
     settings.update(changes)
     shown = sorted(k for k in changes)
     sup.panel_log(f"Settings saved ({', '.join(shown) or 'no changes'}).")
-    return web.json_response({"ok": True, "restart_needed": sup.running and bool(changes)})
+    bot_reads = set(changes) - PANEL_ONLY  # the bot reads its settings once, when it starts
+    return web.json_response({"ok": True, "restart_needed": sup.running and bool(bot_reads)})
 
 
 # ---- maintenance --------------------------------------------------------------------------------
@@ -416,12 +426,58 @@ async def profile(request: web.Request):
 async def dash_proxy(request: web.Request):
     s = request["session"]
     uid = "owner" if s["k"] == "owner" else s["u"]["id"]
-    query = {k: v for k, v in request.query.items() if k != "uid"}
-    query["uid"] = uid
+    need = settings.load().get("dash_permission") or "administrator"
+    query = {k: v for k, v in request.query.items() if k not in ("uid", "need", "also", "refresh")}
+    query.update(uid=uid, need=need)
+    tail = request.match_info["tail"]
+    mine = None
+    if tail == "guilds" and request.method == "GET" and uid != "owner":
+        # every server the person manages, so the page can offer "Add" for the ones without the bot
+        mine = await discord_login.user_guilds(uid, refresh=request.query.get("refresh") == "1")
+        if mine is not None:
+            query["also"] = ",".join(g["id"] for g in mine if discord_login.can_manage(g, need))
     body = await request.read() if request.can_read_body else None
-    status_code, content_type, data = await sup.bot_proxy(request.method, "/dash/" + request.match_info["tail"],
-                                                          query, body)
+    status_code, content_type, data = await sup.bot_proxy(request.method, "/dash/" + tail, query, body)
+    if tail == "guilds" and status_code == 200:
+        out = json.loads(data)
+        out["need"] = need
+        out["listed"] = mine is not None or uid == "owner"
+        if mine is not None:
+            present = set(out.get("present") or []) | {g["id"] for g in out["guilds"]}
+            app_id = settings.load().get("application_id")
+            out["addable"] = [{"id": g["id"], "name": g["name"], "icon": g["icon"],
+                               "invite": _invite(app_id, g["id"]) if app_id else None}
+                              for g in sorted(mine, key=lambda g: g["name"].lower())
+                              if discord_login.can_manage(g, need) and g["id"] not in present]
+        out.pop("present", None)
+        return web.json_response(out)
     return web.Response(body=data, status=status_code, content_type=content_type)
+
+
+def _invite(app_id: str, guild_id: str | None = None) -> str:
+    from ..bot.client import invite_url
+    url = invite_url(int(app_id))
+    return url + (f"&guild_id={guild_id}&disable_guild_select=true" if guild_id else "")
+
+
+async def public(_):
+    """What the front page shows to anyone: the bot's name, picture, invite, and whether sign-in is on."""
+    card = settings.raw().get("public_card") or {}
+    if sup.running:
+        try:
+            st = await sup.bot_request("GET", "/state", timeout=2)
+            if st.get("id"):
+                card = {"name": (st.get("user") or "").split("#")[0], "avatar": st.get("avatar"), "servers": st.get("guilds")}
+                if card != settings.raw().get("public_card"):
+                    settings.update({"public_card": card})
+        except Exception:  # noqa: BLE001 — still starting: use the last known card
+            pass
+    app_id = settings.load().get("application_id")
+    return web.json_response({"name": card.get("name") or "Yae Music", "avatar": card.get("avatar"),
+                              "servers": card.get("servers"), "online": sup.running,
+                              "invite": _invite(app_id) if app_id else None,
+                              "discord_login": discord_login.configured(),
+                              "need": settings.load().get("dash_permission") or "administrator"})
 
 
 # ---- app ---------------------------------------------------------------------------------------
@@ -454,6 +510,8 @@ def make_app() -> web.Application:
     app = web.Application(middlewares=[guard], client_max_size=16 * 1024 * 1024)
     r = app.router
     r.add_get("/", index)
+    r.add_get("/admin", index)  # the owner's way in: the same page, with the password form
+    r.add_get("/api/public", public)
     r.add_get("/favicon.ico", favicon)
     r.add_get("/dashboard.js", dashboard_js)
     r.add_static("/ds/", STATIC / "ds")  # the Shrine Fox design system: css, mascots, backdrops

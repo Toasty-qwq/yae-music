@@ -33,6 +33,7 @@ DEFAULTS: dict = {
     "public_url": "",            # e.g. https://music.example.com, where people open the panel
     "oauth_client_secret": "",   # Developer Portal → OAuth2 → Client Secret
     "application_id": "",        # filled in by itself from the running bot
+    "dash_permission": "administrator",  # who may manage a server on the dashboard: administrator | manage_guild
 }
 
 # env var -> settings key

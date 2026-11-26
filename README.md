@@ -176,9 +176,16 @@ password, can change server settings):
 3. Developer Portal → **OAuth2** → **Redirects** → add that URL. Copy the **Client Secret** from the
    same page into the panel and save.
 
-The sign-in page then shows **Sign in with Discord**. People who sign in see only the servers
-where they have the Manage Server permission. The bot checks that on Discord on every change, and
-they never see the bot's token, logs or music controls.
+**The public site and your own door.** The panel's address is a public front page, like
+Carl-bot's: the bot's name and picture, what it does, **Add to Discord**, and **Open the
+dashboard** (sign in with Discord). People who sign in get only the **Servers** page: the servers
+where they have **Administrator** (or **Manage Server**, your choice in Settings → Discord sign-in;
+the server's owner always can), with the bot's servers to set up and the others with an **Add the
+bot** button. The bot checks their permission on Discord on every change, and they never see the
+token, logs, settings or music controls.
+
+You sign in at **`/admin`** (for example `https://music.example.com/admin`) with the panel
+password, and see everything as before.
 
 ## How Spotify works
 

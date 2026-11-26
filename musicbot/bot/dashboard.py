@@ -1,7 +1,7 @@
 """The dashboard's view of the bot: which servers someone may manage, a server's channels and
 roles, and saving its settings. Served on the bot's local API; the panel calls it with the signed-in
 person's Discord user id (``uid``), or ``owner`` for the panel owner, and the bot checks on Discord
-that that person really has Manage Server in the server, on every request."""
+that that person really has Administrator (or Manage Server, the owner's choice) in the server, on every request."""
 from __future__ import annotations
 
 import base64
@@ -50,11 +50,18 @@ async def member_of(guild: discord.Guild, uid: str) -> discord.Member | None:
     return m
 
 
-async def can_manage(guild: discord.Guild, uid: str) -> bool:
+PERM_NAMES = {"administrator": "Administrator", "manage_guild": "Manage Server"}
+
+
+async def can_manage(guild: discord.Guild, uid: str, need: str = "administrator") -> bool:
+    """``need`` is the panel's dash_permission: administrator, or manage_guild (which admins have too)."""
     if uid == "owner":
         return True
     m = await member_of(guild, uid)
-    return bool(m and (m.guild_permissions.manage_guild or guild.owner_id == m.id))
+    if not m:
+        return False
+    p = m.guild_permissions
+    return guild.owner_id == m.id or p.administrator or (need == "manage_guild" and p.manage_guild)
 
 
 def guild_card(g: discord.Guild) -> dict:
@@ -64,19 +71,22 @@ def guild_card(g: discord.Guild) -> dict:
 
 def routes(bot: "MusicBot") -> list[web.RouteDef]:
     async def guild_or_403(request: web.Request) -> discord.Guild:
-        uid = request.query.get("uid", "")
+        uid, need = request.query.get("uid", ""), request.query.get("need", "administrator")
         guild = bot.get_guild(int(request.match_info["gid"]))
         if guild is None:
             raise web.HTTPNotFound(text='{"error":"The bot isn\'t in that server."}', content_type="application/json")
-        if not await can_manage(guild, uid):
-            raise web.HTTPForbidden(text='{"error":"You need the Manage Server permission in that server."}',
-                                    content_type="application/json")
+        if not await can_manage(guild, uid, need):
+            raise web.HTTPForbidden(text=json.dumps({"error": f"You need the {PERM_NAMES.get(need, need)} permission "
+                                                              "in that server."}), content_type="application/json")
         return guild
 
     async def guilds(request: web.Request):
-        uid = request.query.get("uid", "")
-        out = [guild_card(g) for g in sorted(bot.guilds, key=lambda g: g.name.lower()) if await can_manage(g, uid)]
-        return web.json_response({"guilds": out, "intents": intents()})
+        uid, need = request.query.get("uid", ""), request.query.get("need", "administrator")
+        out = [guild_card(g) for g in sorted(bot.guilds, key=lambda g: g.name.lower()) if await can_manage(g, uid, need)]
+        # of the person's own servers (from their Discord sign-in), the ones the bot is in
+        also = {x for x in request.query.get("also", "").split(",") if x.isdigit()}
+        present = [str(g.id) for g in bot.guilds if str(g.id) in also]
+        return web.json_response({"guilds": out, "present": present, "intents": intents()})
 
     def intents() -> dict:
         return {"members": bot.intents.members, "message_content": bot.intents.message_content}

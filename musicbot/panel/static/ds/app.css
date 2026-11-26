@@ -138,3 +138,41 @@
 #rs-form[hidden]{display:none}
 @media (max-width:560px){.cu-step{grid-template-columns:minmax(0,1fr);gap:6px}}
 #rs-repeat{flex-wrap:wrap;max-width:100%}
+
+/* The public front page */
+#landing{position:relative;min-height:100vh;background:var(--paper);isolation:isolate}
+#landing .land-sky{
+  position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:
+    radial-gradient(900px 520px at 16% -10%, color-mix(in srgb,var(--sakura) 26%,transparent), transparent 62%),
+    radial-gradient(760px 480px at 92% 6%, color-mix(in srgb,var(--plum) 22%,transparent), transparent 58%),
+    linear-gradient(to bottom, color-mix(in srgb,var(--paper) 58%,transparent) 0%, color-mix(in srgb,var(--paper) 88%,transparent) 62%),
+    var(--backdrop);
+  background-repeat:no-repeat;background-size:auto,auto,auto,cover;background-position:0 0,0 0,0 0,center bottom;
+}
+.land{max-width:1080px;margin:0 auto;padding:56px 16px 48px}
+.land-hero{
+  display:flex;align-items:center;gap:28px;margin-bottom:32px;padding:28px;
+  background-color:var(--card);background-image:var(--washi);
+  border:var(--edge) solid var(--slab-bg);box-shadow:var(--lift-3);
+}
+.land-avatar{width:128px;height:128px;border-radius:50%;flex:none;object-fit:cover;
+  border:var(--edge) solid var(--slab-bg);box-shadow:var(--lift-2);background:var(--paper-2)}
+.land-words{flex:1;min-width:0}
+.land-cta{margin-top:18px}
+.land-note{margin:12px 0 0;font-size:13px;color:var(--faint)}
+.land-err{margin-top:12px}
+.land-fox{align-self:flex-end;flex:none}
+.land-feat header{gap:10px}
+.land-kanji{display:inline-grid;place-items:center;width:30px;height:30px;flex:none;
+  background:var(--slab-bg);color:var(--slab-fg);font-weight:800;font-size:15px}
+.land-feat .card-sub{margin:0}
+@media (max-width:700px){
+  .land{padding-top:24px}
+  .land-hero{flex-direction:column;align-items:flex-start;padding:20px;gap:16px}
+  .land-avatar{width:96px;height:96px}
+  .land-fox{display:none}
+}
+/* Servers page: the "add the bot" section */
+.pk-sub{font-family:var(--disp);font-size:15px;text-transform:uppercase;letter-spacing:.08em;margin:30px 0 14px;color:var(--mid)}
+.pk-add::after{border-style:dashed}

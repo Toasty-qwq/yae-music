@@ -225,31 +225,49 @@ function showProblem(text) {
     `<div class="btnrow" style="justify-content:center"><a class="btn" href="#servers"><span class="p5-hl" aria-hidden="true"></span><span>All servers</span></a></div>`;
 }
 
-async function showPicker() {
+async function showPicker(refresh = false) {
   G = null;
   $("#crumb-t").textContent = "Servers";
   root().innerHTML = loading("Finding the servers you can manage");
   let data;
-  try { data = await api("/api/dash/guilds"); } catch (e) { return showProblem(e.message); }
+  try { data = await api("/api/dash/guilds" + (refresh ? "?refresh=1" : "")); } catch (e) { return showProblem(e.message); }
   const owner = window.ME && ME.kind === "owner";
+  const perm = data.need === "manage_guild" ? "Manage Server" : "Administrator";
+  const addable = data.addable || [];
+  const icon = g => g.icon ? `<img src="${esc(g.icon)}" alt="" width="56" height="56" style="border-radius:50%;border:2.5px solid var(--slab-bg)">`
+    : `<span class="seal dead" role="img" aria-label="No icon"><b>${esc(g.name.slice(0, 1))}</b></span>`;
   const head = `<header class="fleet-head page-intro"><div class="fh-words">
-      <p class="eyebrow">Dashboard · <b>${data.guilds.length} server${data.guilds.length === 1 ? "" : "s"}</b></p>
+      <p class="eyebrow">Dashboard · <b>${data.guilds.length} server${data.guilds.length === 1 ? "" : "s"}</b>${addable.length ? ` · ${addable.length} without the bot` : ""}</p>
       <h1 class="brush fh-title">Your servers</h1>
-      <p class="lede">${owner ? "As the panel's owner you can open every server the bot is in." : "Servers where you have the Manage Server permission and the bot is a member."}</p>
+      <p class="lede">${owner ? "As the panel's owner you can open every server the bot is in." : `Servers where you have ${perm}. Open one to set it up, or add the bot to the others.`}</p>
     </div><img class="mascot fh-fox" src="${M("fox-pounce")}" alt="" width="92" height="92"></header>${intentsNote(data.intents)}`;
-  if (!data.guilds.length) {
-    root().innerHTML = head + emptyState("placeblock", "No servers to manage yet", owner
-      ? "The bot isn't in any server. Add it with the invite on the Overview."
-      : "You need the Manage Server permission in a server the bot is in.");
-    return;
-  }
-  root().innerHTML = head + `<div class="grid gauto bleed">${data.guilds.map(g => `
+  const refreshBtn = owner ? "" : `<div class="btnrow" style="margin-bottom:18px">${btn("pk-refresh", "Refresh the list", "ghost")}
+      <span class="muted" style="font-size:12.5px">Added the bot somewhere? Refresh to see it here.</span></div>`;
+  const stale = !owner && !data.listed ? `<div class="note info" style="margin-bottom:18px"><b>Only servers the bot is in</b>Sign out and in again to also see your servers without the bot.</div>` : "";
+  const ready = data.guilds.map(g => `
     <a class="card hoverable" href="#servers/${g.id}" style="text-decoration:none;color:inherit"><span class="p5-hl" aria-hidden="true"></span>
       <header><h3>${esc(g.name)}</h3><span class="k">${g.members ?? "?"} members</span></header>
-      <div style="display:flex;align-items:center;gap:14px">
-        ${g.icon ? `<img src="${esc(g.icon)}" alt="" width="56" height="56" style="border-radius:50%;border:2.5px solid var(--slab-bg)">` : `<span class="seal dead" role="img" aria-label="No icon"><b>${esc(g.name.slice(0, 1))}</b></span>`}
-        <p class="card-sub" style="margin:0">Welcome, roles, messages, tags, moderation and logs.</p>
-      </div></a>`).join("")}</div>`;
+      <div style="display:flex;align-items:center;gap:14px">${icon(g)}
+        <p class="card-sub" style="margin:0">Welcome, roles, moderation, logs, voice rooms, tickets and more.</p>
+      </div></a>`).join("");
+  const add = addable.map(g => `
+    <div class="card pk-add">
+      <header><h3>${esc(g.name)}</h3><span class="k">No bot yet</span></header>
+      <div style="display:flex;align-items:center;gap:14px">${icon(g)}
+        ${g.invite ? `<a class="btn sm primary" href="${esc(g.invite)}" target="_blank" rel="noopener"><span class="p5-hl" aria-hidden="true"></span>${svg("plus")}<span>Add the bot</span></a>`
+                   : `<p class="card-sub" style="margin:0">The bot has to be online once before it can be added.</p>`}
+      </div></div>`).join("");
+  if (!data.guilds.length && !addable.length) {
+    root().innerHTML = head + refreshBtn + stale + emptyState("placeblock", "No servers to manage yet", owner
+      ? "The bot isn't in any server. Add it with the invite on the Overview."
+      : `You need ${perm} in a server to manage it here.`);
+  } else {
+    root().innerHTML = head + refreshBtn + stale +
+      (ready ? `<div class="grid gauto bleed">${ready}</div>` : "") +
+      (add ? `<h2 class="pk-sub">Add the bot</h2><div class="grid gauto bleed">${add}</div>` : "");
+  }
+  const r = $("#pk-refresh");
+  if (r) r.onclick = () => showPicker(true);
 }
 
 function intentsNote(i) {

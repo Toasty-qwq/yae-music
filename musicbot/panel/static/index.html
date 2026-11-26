@@ -33,11 +33,6 @@
     <div class="gate-mark"><img class="mascot" id="gate-fox" src="/ds/mascots/wave.gif" alt="" width="84" height="84" draggable="false"></div>
     <h1 class="gate-name">Yae Music</h1>
     <p class="gate-sub" id="gate-sub">Control panel</p>
-    <div class="gate-form" id="gate-discord" hidden>
-      <a class="btn primary block" href="/auth/discord" id="discord-btn"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H8"/></svg><span>Sign in with Discord</span></a>
-      <p class="gate-foot" style="margin:6px 0 4px">Manage the servers where you have the Manage Server permission.</p>
-      <button class="btn ghost block" type="button" id="owner-toggle"><span>I run this panel: use the password</span></button>
-    </div>
     <form class="gate-form" id="gate-form" novalidate>
       <input class="inp" type="password" id="pw1" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
       <input class="inp" type="password" id="pw2" placeholder="The same password again" aria-label="Repeat the password" autocomplete="new-password" hidden>
@@ -48,13 +43,45 @@
   </div>
 </div>
 
+<!-- ============ the front page (anyone; the owner's door is /admin) ============ -->
+<div id="landing" hidden>
+  <div class="land-sky" aria-hidden="true"></div>
+  <main class="land">
+    <header class="land-hero">
+      <img class="land-avatar" id="land-avatar" src="/ds/icon.png" alt="" width="128" height="128">
+      <div class="land-words">
+        <p class="eyebrow">Discord bot<span id="land-count"></span></p>
+        <h1 class="brush fh-title" id="land-name">Yae Music</h1>
+        <p class="lede">Music, welcome messages, roles, moderation, logs, voice rooms and tickets, all set up from one dashboard.</p>
+        <div class="btnrow land-cta">
+          <a class="btn primary" id="land-invite" href="#" hidden><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add to Discord</span></a>
+          <a class="btn" id="land-login" href="/auth/discord" hidden><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H8"/></svg><span>Open the dashboard</span></a>
+        </div>
+        <div class="note bad land-err" id="land-err" role="alert" hidden></div>
+        <p class="land-note" id="land-note"></p>
+      </div>
+      <img class="mascot land-fox" src="/ds/mascots/wave.gif" alt="" width="96" height="96" draggable="false">
+    </header>
+    <section class="grid gauto land-grid" aria-label="What it does">
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">音</span><h3>Music</h3></header><p class="card-sub">YouTube and Spotify songs and playlists, or just type a song's name. Queue, loop, shuffle, volume.</p></article>
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">迎</span><h3>Welcome and roles</h3></header><p class="card-sub">Welcome and goodbye messages with embeds and GIFs, autorole, reaction-role menus, roles from forum tags.</p></article>
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">守</span><h3>Moderation</h3></header><p class="card-sub">Bans (also for a while), kicks, timeouts and warnings, each a numbered case in a mod log.</p></article>
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">記</span><h3>Logs</h3></header><p class="card-sub">Deleted and edited messages, joins and leaves, role and nickname changes, voice, each to its own channel.</p></article>
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">室</span><h3>Voice rooms</h3></header><p class="card-sub">Join a channel to get your own voice room: rename it, lock it, let people in, hand it over.</p></article>
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">票</span><h3>Tickets</h3></header><p class="card-sub">Ticket panels with several types, like Support or Apply, with forms, claiming and transcripts.</p></article>
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">星</span><h3>Community</h3></header><p class="card-sub">Starboard, suggestions with votes, tags, auto-replies and reminders.</p></article>
+        <article class="card land-feat"><header><span class="land-kanji" aria-hidden="true">盤</span><h3>A dashboard</h3></header><p class="card-sub">Set it all up on this site: sign in with Discord and pick your server.</p></article>
+    </section>
+  </main>
+</div>
+
 <!-- ============ the shell ============ -->
 <div id="shell" hidden>
   <nav id="rail" aria-label="Panel">
     <span class="rail-rope" aria-hidden="true"></span>
     <a class="rail-brand" href="#overview">
       <img class="mascot rail-mark" src="/ds/mascots/fox-prowl.gif" alt="" width="44" height="44" draggable="false">
-      <span><span class="wm">Yae Music</span><span class="tag">Control panel</span></span>
+      <span><span class="wm" id="rail-name">Yae Music</span><span class="tag" id="rail-tag">Control panel</span></span>
     </a>
     <div class="rail-nav">
       <div class="sec">The bot</div>
@@ -235,7 +262,7 @@
                 <section class="panel">
                   <header><h3>Discord sign-in</h3><span class="sp" id="oauth-state"></span></header>
                   <div class="pad">
-                    <p>Lets server admins sign in with Discord and manage their own servers on the Servers page. Set it up once:</p>
+                    <p>Lets server admins sign in with Discord on the front page and manage their own servers, like Carl-bot's dashboard. Set it up once:</p>
                     <ol style="margin:0 0 14px;padding-left:20px;font-size:13.5px;line-height:1.6">
                       <li>Type the address people open this panel at, below, and save.</li>
                       <li>In the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Developer Portal</a>, open the bot's application, then <b>OAuth2</b>.</li>
@@ -246,6 +273,12 @@
                       <div class="help">Where people open the panel, with https. No path after the name.</div></div>
                     <div class="field"><label for="s-oauth_client_secret">Client secret</label><input type="password" id="s-oauth_client_secret">
                       <div class="help">Leave it empty to keep the saved one. The Client ID comes from the running bot by itself<span id="oauth-client"></span>.</div></div>
+                    <div class="field"><label for="s-dash_permission">Who can manage a server</label>
+                      <select id="s-dash_permission">
+                        <option value="administrator">People with Administrator in that server</option>
+                        <option value="manage_guild">People with Manage Server in that server (like Carl-bot)</option>
+                      </select>
+                      <div class="help">The server's owner always can. People who sign in see only the Servers page, and only their own servers. The front page is the public address; you sign in at <code>/admin</code>.</div></div>
                   </div>
                 </section>
                 <section class="panel">
@@ -377,7 +410,7 @@ async function api(path, {method = "GET", body} = {}) {
                                body: body === undefined ? undefined : JSON.stringify(body)});
   let data = {};
   try { data = await r.json(); } catch {}
-  if (r.status === 401 && !path.startsWith("/api/login")) { showGate(false); throw new Error("Your sign-in ran out. Sign in again."); }
+  if (r.status === 401 && !path.startsWith("/api/login")) { signedOut(); throw new Error("Your sign-in ran out. Sign in again."); }
   if (!r.ok || data.ok === false) throw new Error(data.error || r.statusText || `The server answered ${r.status}.`);
   return data;
 }
@@ -437,11 +470,8 @@ function showGate(setup) {
   $("#pw1").placeholder = setup ? "Choose a password" : "Password";
   $("#gate-sub").textContent = setup ? "First visit: choose a password" : "Control panel";
   $("#gate-btn span:last-child").textContent = setup ? "Set the password" : "Sign in";
-  const discordFirst = discordLogin && !setup;
-  $("#gate-discord").hidden = !discordFirst;
-  $("#gate-form").hidden = discordFirst;
-  $("#gate-foot").hidden = setup || discordFirst;
-  $("#gate-btn").classList.toggle("primary", !discordFirst);
+  $("#landing").hidden = true;
+  $("#gate-foot").hidden = setup;
   $("#gate-fox").src = M("wave");
   $("#pw1").focus();
 }
@@ -478,7 +508,7 @@ $("#gate-form").onsubmit = async ev => {
 
 /* ---------- screens ---------- */
 const SCREENS = {overview: "Overview", servers: "Servers", commands: "Commands", profile: "Bot profile", logs: "Logs", settings: "Settings", upkeep: "Upkeep"};
-const PUBLIC_SCREENS = ["servers", "commands"];  // what a Discord sign-in can open
+const PUBLIC_SCREENS = ["servers"];  // what a Discord sign-in can open
 let screen = "overview";
 window.ME = {kind: null, user: null};
 function route() {
@@ -856,7 +886,7 @@ $("#log-clear").onclick = async () => {
 /* ---------- settings ---------- */
 const FIELDS = ["discord_token", "spotify_client_id", "spotify_client_secret", "default_volume", "idle_timeout",
                 "max_playlist", "max_queue", "ffmpeg_path", "autostart", "auto_restart", "update_ytdlp_on_start",
-                "public_url", "oauth_client_secret"];
+                "public_url", "oauth_client_secret", "dash_permission"];
 async function loadSettings() {
   try {
     const s = await api("/api/settings");
@@ -1107,10 +1137,38 @@ $("#pw-form").onsubmit = async ev => {
 };
 $("#logout-btn").onclick = async () => {
   try { await api("/api/logout", {method: "POST"}); } catch {}
-  if (es) es.close();
-  timers.forEach(clearInterval);
-  showGate(false);
+  signedOut();
 };
+// Owners sign in at /admin; everyone else sees the front page.
+const ADMIN = location.pathname.replace(/\/+$/, "") === "/admin";
+function signedOut() {
+  if (typeof es !== "undefined" && es) es.close();
+  timers.forEach(clearInterval);
+  timers = [];
+  window.ME = {kind: null, user: null};
+  if (ADMIN) showGate(false); else showLanding();
+}
+async function showLanding(err) {
+  $("#gate").hidden = $("#shell").hidden = true;
+  $("#landing").hidden = false;
+  paintTheme();
+  const e = $("#land-err");
+  e.hidden = !err;
+  e.textContent = err || "";
+  let p = {};
+  try { p = await fetch("/api/public").then(r => r.json()); } catch {}
+  document.title = p.name || "Yae Music";
+  $("#land-name").textContent = p.name || "Yae Music";
+  $("#rail-name").textContent = p.name || "Yae Music";
+  if (p.avatar) $("#land-avatar").src = p.avatar;
+  $("#land-count").innerHTML = p.servers ? ` · <b>in ${p.servers} server${p.servers === 1 ? "" : "s"}</b>` : "";
+  $("#land-invite").hidden = !p.invite;
+  if (p.invite) $("#land-invite").href = p.invite;
+  $("#land-login").hidden = !p.discord_login;
+  $("#land-note").textContent = p.discord_login
+    ? `The dashboard shows the servers where you have ${p.need === "manage_guild" ? "Manage Server" : "Administrator"}. Discord asks you to allow it once.`
+    : "The dashboard isn't open yet.";
+}
 
 /* ---------- start ---------- */
 let timers = [];
@@ -1121,7 +1179,10 @@ function enterApp(me) {
   $("#shell").hidden = false;
   paintTheme();
   // A Discord sign-in sees only the Servers page: no power buttons, no log, no panel settings.
-  document.querySelectorAll("[data-owner]").forEach(el => el.hidden = !owner);
+  document.querySelectorAll("[data-owner], .navlink[data-tab=commands]").forEach(el => el.hidden = !owner);
+  $("#landing").hidden = true;
+  $("#rail-tag").textContent = owner ? "Control panel" : "Dashboard";
+  $(".rail-brand").setAttribute("href", owner ? "#overview" : "#servers");
   $("#power").hidden = $("#cmp").hidden = $("#conn").hidden = !owner;
   $("#who").hidden = owner;
   if (!owner && ME.user) $("#who-name").textContent = ME.user.name;
@@ -1142,19 +1203,17 @@ const LOGIN_ERRORS = {
   secret: "Discord refused this panel's client secret. The owner pastes a fresh one into Settings.",
   discord: "Discord didn't answer. Try again in a moment.",
 };
-let discordLogin = false;
-$("#owner-toggle").onclick = () => { $("#gate-discord").hidden = true; $("#gate-form").hidden = false; $("#gate-foot").hidden = false; $("#gate-btn").classList.add("primary"); $("#pw1").focus(); };
 (async () => {
   const err = new URLSearchParams(location.search).get("login_error");
   if (err) history.replaceState(null, "", location.pathname + location.hash);
   try {
     const a = await fetch("/api/auth").then(r => r.json());
-    discordLogin = a.discord_login;
-    if (a.logged_in) enterApp({kind: a.kind, user: a.user});
-    else {
+    // /admin wants the owner: a Discord sign-in there still gets the password form
+    if (a.logged_in && (a.kind === "owner" || !ADMIN)) enterApp({kind: a.kind, user: a.user});
+    else if (a.setup || ADMIN) {
       showGate(a.setup);
       if (err) gateError(LOGIN_ERRORS[err] || "The sign-in didn't work. Try again.");
-    }
+    } else showLanding(err ? LOGIN_ERRORS[err] || "The sign-in didn't work. Try again." : "");
   } catch { showGate(false); gateError("The panel is not answering. Check that it is running."); }
 })();
 </script>
