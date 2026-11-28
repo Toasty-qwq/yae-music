@@ -23,7 +23,7 @@ from .supervisor import Supervisor
 
 log = logging.getLogger("musicbot.panel")
 STATIC = Path(__file__).parent / "static"
-OPEN_PATHS = {"/", "/admin", "/healthz", "/api/auth", "/api/public", "/api/login", "/api/setup", "/favicon.ico"}
+OPEN_PATHS = {"/", "/administrator", "/healthz", "/api/auth", "/api/public", "/api/login", "/api/setup", "/favicon.ico"}
 ANY_SESSION = ("/api/dash/", "/api/logout")  # Discord sign-ins reach only these; everything else is the owner's
 SECRET_KEYS = {"discord_token", "spotify_client_secret", "oauth_client_secret"}
 INT_KEYS = {"default_volume": (0, 200), "idle_timeout": (0, 1440), "max_playlist": (1, 5000),
@@ -470,6 +470,8 @@ async def public(_):
                 card = {"name": (st.get("user") or "").split("#")[0], "avatar": st.get("avatar"), "servers": st.get("guilds")}
                 if card != settings.raw().get("public_card"):
                     settings.update({"public_card": card})
+                if settings.raw().get("application_id") != st["id"]:
+                    settings.update({"application_id": st["id"]})  # the Client ID Discord sign-in needs
         except Exception:  # noqa: BLE001 — still starting: use the last known card
             pass
     app_id = settings.load().get("application_id")
@@ -510,7 +512,7 @@ def make_app() -> web.Application:
     app = web.Application(middlewares=[guard], client_max_size=16 * 1024 * 1024)
     r = app.router
     r.add_get("/", index)
-    r.add_get("/admin", index)  # the owner's way in: the same page, with the password form
+    r.add_get("/administrator", index)  # the owner's way in: the only page with the password form
     r.add_get("/api/public", public)
     r.add_get("/favicon.ico", favicon)
     r.add_get("/dashboard.js", dashboard_js)

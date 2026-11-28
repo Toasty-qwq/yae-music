@@ -43,9 +43,16 @@
   </div>
 </div>
 
-<!-- ============ the front page (anyone; the owner's door is /admin) ============ -->
+<!-- ============ the front page (anyone; the owner's door is /administrator) ============ -->
 <div id="landing" hidden>
   <div class="land-sky" aria-hidden="true"></div>
+  <nav class="land-top" aria-label="Site">
+    <a class="land-brand" href="/"><img id="land-top-avatar" src="/ds/icon.png" alt="" width="32" height="32"><span id="land-top-name">Yae Music</span></a>
+    <div class="btnrow land-top-btns">
+      <a class="btn sm ghost" id="land-top-invite" href="#" hidden><span>Add to Discord</span></a>
+      <a class="btn sm primary land-login" href="/auth/discord"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H8"/></svg><span>Log in with Discord</span></a>
+    </div>
+  </nav>
   <main class="land">
     <header class="land-hero">
       <img class="land-avatar" id="land-avatar" src="/ds/icon.png" alt="" width="128" height="128">
@@ -55,7 +62,7 @@
         <p class="lede">Music, welcome messages, roles, moderation, logs, voice rooms and tickets, all set up from one dashboard.</p>
         <div class="btnrow land-cta">
           <a class="btn primary" id="land-invite" href="#" hidden><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add to Discord</span></a>
-          <a class="btn" id="land-login" href="/auth/discord" hidden><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H8"/></svg><span>Open the dashboard</span></a>
+          <a class="btn land-login" id="land-login" href="/auth/discord"><span class="p5-hl" aria-hidden="true"></span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H8"/></svg><span>Open the dashboard</span></a>
         </div>
         <div class="note bad land-err" id="land-err" role="alert" hidden></div>
         <p class="land-note" id="land-note"></p>
@@ -278,7 +285,7 @@
                         <option value="administrator">People with Administrator in that server</option>
                         <option value="manage_guild">People with Manage Server in that server (like Carl-bot)</option>
                       </select>
-                      <div class="help">The server's owner always can. People who sign in see only the Servers page, and only their own servers. The front page is the public address; you sign in at <code>/admin</code>.</div></div>
+                      <div class="help">The server's owner always can. People who sign in see only the Servers page, and only their own servers. The front page is the public address; you sign in at <code>/administrator</code>.</div></div>
                   </div>
                 </section>
                 <section class="panel">
@@ -1139,8 +1146,8 @@ $("#logout-btn").onclick = async () => {
   try { await api("/api/logout", {method: "POST"}); } catch {}
   signedOut();
 };
-// Owners sign in at /admin; everyone else sees the front page.
-const ADMIN = location.pathname.replace(/\/+$/, "") === "/admin";
+// Owners sign in at /administrator; everyone else sees the front page.
+const ADMIN = location.pathname.replace(/\/+$/, "") === "/administrator";
 function signedOut() {
   if (typeof es !== "undefined" && es) es.close();
   timers.forEach(clearInterval);
@@ -1164,10 +1171,20 @@ async function showLanding(err) {
   $("#land-count").innerHTML = p.servers ? ` · <b>in ${p.servers} server${p.servers === 1 ? "" : "s"}</b>` : "";
   $("#land-invite").hidden = !p.invite;
   if (p.invite) $("#land-invite").href = p.invite;
-  $("#land-login").hidden = !p.discord_login;
-  $("#land-note").textContent = p.discord_login
-    ? `The dashboard shows the servers where you have ${p.need === "manage_guild" ? "Manage Server" : "Administrator"}. Discord asks you to allow it once.`
-    : "The dashboard isn't open yet.";
+  $("#land-top-name").textContent = p.name || "Yae Music";
+  if (p.avatar) $("#land-top-avatar").src = p.avatar;
+  $("#land-top-invite").hidden = !p.invite;
+  if (p.invite) $("#land-top-invite").href = p.invite;
+  // The log-in buttons always show; without Discord sign-in set up they explain instead of leaving.
+  document.querySelectorAll(".land-login").forEach(a => a.onclick = ev => {
+    if (p.discord_login) return;
+    ev.preventDefault();
+    const e = $("#land-err");
+    e.hidden = false;
+    e.textContent = "Signing in with Discord isn't switched on yet. The bot's owner turns it on in the panel's Settings → Discord sign-in.";
+    e.scrollIntoView({block: "center", behavior: "smooth"});
+  });
+  $("#land-note").textContent = `The dashboard shows the servers where you have ${p.need === "manage_guild" ? "Manage Server" : "Administrator"}. Discord asks you to allow it once.`;
 }
 
 /* ---------- start ---------- */
@@ -1203,18 +1220,30 @@ const LOGIN_ERRORS = {
   secret: "Discord refused this panel's client secret. The owner pastes a fresh one into Settings.",
   discord: "Discord didn't answer. Try again in a moment.",
 };
+// Clicking "Log in with Discord" leaves the page, and the browser cancels what it was still
+// asking the panel. That isn't the panel failing, so it must not show an error on the way out.
+let leaving = false;
+addEventListener("pagehide", () => { leaving = true; });
+addEventListener("beforeunload", () => { leaving = true; });
 (async () => {
   const err = new URLSearchParams(location.search).get("login_error");
   if (err) history.replaceState(null, "", location.pathname + location.hash);
-  try {
-    const a = await fetch("/api/auth").then(r => r.json());
-    // /admin wants the owner: a Discord sign-in there still gets the password form
-    if (a.logged_in && (a.kind === "owner" || !ADMIN)) enterApp({kind: a.kind, user: a.user});
-    else if (a.setup || ADMIN) {
-      showGate(a.setup);
-      if (err) gateError(LOGIN_ERRORS[err] || "The sign-in didn't work. Try again.");
-    } else showLanding(err ? LOGIN_ERRORS[err] || "The sign-in didn't work. Try again." : "");
-  } catch { showGate(false); gateError("The panel is not answering. Check that it is running."); }
+  const errText = err ? LOGIN_ERRORS[err] || "The sign-in didn't work. Try again." : "";
+  let a;
+  try { a = await fetch("/api/auth").then(r => r.json()); }
+  catch {
+    if (leaving) return;
+    // the password form only ever shows at /administrator; the front page says it in its own words
+    if (ADMIN) { showGate(false); gateError("The panel is not answering. Check that it is running."); }
+    else showLanding("The site isn't answering right now. Try again in a moment.");
+    return;
+  }
+  // /administrator wants the owner: a Discord sign-in there still gets the password form
+  if (a.logged_in && (a.kind === "owner" || !ADMIN)) enterApp({kind: a.kind, user: a.user});
+  else if (ADMIN) {
+    showGate(a.setup);
+    if (errText) gateError(errText);
+  } else showLanding(errText);
 })();
 </script>
 <script src="/dashboard.js?v=__V__"></script>

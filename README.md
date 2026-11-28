@@ -18,7 +18,7 @@ Runs on your Windows PC (`start.bat`) or as a Docker container (CasaOS or any Do
 Needs **Python 3.11+** (from python.org, tick "Add to PATH") and **FFmpeg** (`winget install Gyan.FFmpeg`).
 
 Double-click **`start.bat`**. The first run installs everything into `.venv` and then opens the
-panel at <http://localhost:8484>. On first visit you choose a panel password. The bot runs for as
+panel at <http://localhost:8484/administrator>. On first visit you choose a panel password. The bot runs for as
 long as that window stays open.
 
 ## 3. Run it on CasaOS (Docker)
@@ -47,7 +47,7 @@ both normal PCs (amd64) and ARM boards like a Raspberry Pi 4/5 (arm64).
 
 5. CasaOS → **App Store** → **Custom Install** → **Import** (top right). Paste the compose
    file from step 3, then **Submit** and **Install**.
-6. Click the **Yae Music** tile (or open `http://<server-ip>:8484`), choose a panel password,
+6. Click the **Yae Music** tile (or open `http://<server-ip>:8484/administrator`), choose a panel password,
    paste the token in **Settings**, **Save**, and press **Start**.
 
 It starts by itself after a reboot. The token, settings, logs and cookies live in
@@ -184,7 +184,7 @@ the server's owner always can), with the bot's servers to set up and the others 
 bot** button. The bot checks their permission on Discord on every change, and they never see the
 token, logs, settings or music controls.
 
-You sign in at **`/admin`** (for example `https://music.example.com/admin`) with the panel
+You sign in at **`/administrator`** (for example `https://music.example.com/administrator`) with the panel
 password, and see everything as before.
 
 ## How Spotify works

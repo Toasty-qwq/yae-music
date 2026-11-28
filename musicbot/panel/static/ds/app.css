@@ -176,3 +176,15 @@
 /* Servers page: the "add the bot" section */
 .pk-sub{font-family:var(--disp);font-size:15px;text-transform:uppercase;letter-spacing:.08em;margin:30px 0 14px;color:var(--mid)}
 .pk-add::after{border-style:dashed}
+/* Front page: the bar along the top (brand left, log in right) */
+.land-top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px max(16px,calc((100% - 1080px) / 2 + 16px));
+  background:color-mix(in srgb,var(--paper) 86%,transparent);backdrop-filter:blur(6px);
+  border-bottom:2px solid var(--rule)}
+.land-brand{display:flex;align-items:center;gap:10px;min-width:0;color:var(--text);text-decoration:none;
+  font-family:var(--disp);font-size:16px}
+.land-brand img{width:32px;height:32px;border-radius:50%;border:2px solid var(--slab-bg);flex:none;object-fit:cover}
+.land-brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.land-top-btns{gap:8px;flex-wrap:nowrap}
+.land{padding-top:32px}
+@media (max-width:520px){#land-top-invite{display:none}}

@@ -28,6 +28,6 @@ if errorlevel 1 (
 )
 
 if not defined NO_BROWSER set OPEN_BROWSER=1
-echo Control panel: http://localhost:8484   ^(close this window to stop the bot^)
+echo Control panel: http://localhost:8484/administrator   ^(close this window to stop the bot^)
 ".venv\Scripts\python.exe" -m musicbot.panel
 pause

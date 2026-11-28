@@ -47,6 +47,6 @@ x-casaos:
     en_us: Plays YouTube and Spotify songs and playlists in Discord voice channels. The control panel shows the live log, starts and stops the bot, shows what each server is playing, and holds the bot's settings.
   title:
     en_us: Yae Music
-  index: /
+  index: /administrator   # the owner's page; / is the public front page
   port_map: "8484"
   scheme: http

@@ -26,14 +26,14 @@ def main() -> None:
     with socket.socket() as probe:
         probe.settimeout(1)
         if probe.connect_ex(("127.0.0.1", port)) == 0:
-            print(f"The panel is already running: http://localhost:{port}")
+            print(f"The panel is already running: http://localhost:{port}/administrator")
             if os.environ.get("OPEN_BROWSER") == "1":
-                webbrowser.open(f"http://localhost:{port}")
+                webbrowser.open(f"http://localhost:{port}/administrator")
             return
     shown = "localhost" if host in ("0.0.0.0", "127.0.0.1", "::") else host
     sup.panel_log(f"Control panel on http://{shown}:{port}  (data in {settings.DATA_DIR})")
     if os.environ.get("OPEN_BROWSER") == "1":
-        threading.Timer(1.5, webbrowser.open, (f"http://localhost:{port}",)).start()
+        threading.Timer(1.5, webbrowser.open, (f"http://localhost:{port}/administrator",)).start()
     web.run_app(make_app(), host=host, port=port, print=None, access_log=None, shutdown_timeout=3)
 
 
